@@ -1,0 +1,55 @@
+server:
+  port: 9000
+
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+      routes:
+        # Route vers le Microservice Auth-Service
+        - id: auth-service-route
+          uri: http://${AUTH_SERVICE_HOST:localhost}:8081
+          predicates:
+            - Path=/api/v1/auth/**
+
+        # Route vers le Microservice System-Config-Service
+        - id: system-config-service-route
+          uri: http://${SYSTEM_SERVICE_HOST:localhost}:8082
+          predicates:
+            - Path=/api/v1/system/**
+
+        # Route vers le Microservice Academic-Service
+        - id: academic-service-route
+          uri: http://${ACADEMIC_SERVICE_HOST:localhost}:8083
+          predicates:
+            - Path=/api/v1/academic/**
+
+        # Route vers le Microservice Evaluation-Service
+        - id: evaluation-service-route
+          uri: http://${EVAL_SERVICE_HOST:localhost}:8084
+          predicates:
+            - Path=/api/v1/evaluation/**
+
+        # Route vers le Microservice Finance-Service
+        - id: finance-service-route
+          uri: http://${FINANCE_SERVICE_HOST:localhost}:8085
+          predicates:
+            - Path=/api/v1/finance/**
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    com.schoolmanager: DEBUG
