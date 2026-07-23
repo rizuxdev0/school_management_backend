@@ -46,7 +46,14 @@ public class AuthService {
         List<String> enabledModules = new ArrayList<>();
         if (tenant != null) {
             if (!tenant.getIsActive()) {
-                throw new RuntimeException("L'établissement est suspendu ou désactivé");
+                throw new RuntimeException(
+                        "L'établissement est suspendu ou désactivé. Veuillez contacter l'administrateur SVP !");
+            }
+            if (tenant.getSubscriptionExpiresAt() != null && tenant.getSubscriptionExpiresAt().isBefore(java.time.ZonedDateTime.now())) {
+                throw new RuntimeException(
+                        "Votre abonnement SaaS a expiré le " + 
+                        tenant.getSubscriptionExpiresAt().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) + 
+                        ". Veuillez contacter le Super Admin pour renouveler votre licence SVP !");
             }
             enabledModules = tenant.getEnabledModules().stream()
                     .map(FeatureModule::getCode)
@@ -65,8 +72,10 @@ public class AuthService {
                 .distinct()
                 .toList();
 
-        Authentication auth = new UsernamePasswordAuthenticationToken(user.getUsername(), null, Collections.emptyList());
-        String token = jwtUtils.generateJwtToken(auth, tenant != null ? tenant.getId() : null, tenant != null ? tenant.getCode() : "SUPERADMIN", enabledModules);
+        Authentication auth = new UsernamePasswordAuthenticationToken(user.getUsername(), null,
+                Collections.emptyList());
+        String token = jwtUtils.generateJwtToken(auth, tenant != null ? tenant.getId() : null,
+                tenant != null ? tenant.getCode() : "SUPERADMIN", enabledModules);
 
         return JwtResponse.builder()
                 .token(token)
@@ -81,6 +90,13 @@ public class AuthService {
                 .roles(roles)
                 .permissions(permissions)
                 .enabledModules(enabledModules)
+                .planCode(tenant != null ? tenant.getPlanCode() : "SYSTEM")
+                .maxStudents(tenant != null && tenant.getMaxStudents() != null ? tenant.getMaxStudents() : 999999)
+                .maxStaff(tenant != null && tenant.getMaxStaff() != null ? tenant.getMaxStaff() : 999999)
+                .maxClassrooms(tenant != null && tenant.getMaxClassrooms() != null ? tenant.getMaxClassrooms() : 999999)
+                .maxBooks(tenant != null && tenant.getMaxBooks() != null ? tenant.getMaxBooks() : 999999)
+                .logoUrl(tenant != null ? tenant.getLogoUrl() : null)
+                .primaryColor(tenant != null ? tenant.getPrimaryColor() : null)
                 .build();
     }
 
@@ -106,6 +122,12 @@ public class AuthService {
                 .domainName(dto.getDomainName())
                 .isActive(true)
                 .enabledModules(modules)
+                .planCode(plan.getCode())
+                .maxStudents(plan.getMaxStudents())
+                .maxStaff(plan.getMaxStaff())
+                .maxClassrooms(plan.getMaxClassrooms())
+                .maxBooks(plan.getMaxBooks())
+                .subscriptionExpiresAt(java.time.ZonedDateTime.now().plusYears(1))
                 .build();
 
         final Tenant savedTenant = tenantRepository.save(tenant);
@@ -135,5 +157,14 @@ public class AuthService {
 
         userRepository.save(adminUser);
         return tenant;
+    }
+
+    @Transactional
+    public Tenant updateTenantBranding(java.util.UUID tenantId, String logoUrl, String primaryColor) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new RuntimeException("Établissement introuvable"));
+        tenant.setLogoUrl(logoUrl);
+        tenant.setPrimaryColor(primaryColor);
+        return tenantRepository.save(tenant);
     }
 }

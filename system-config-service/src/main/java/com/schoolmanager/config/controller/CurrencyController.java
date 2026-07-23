@@ -30,4 +30,22 @@ public class CurrencyController {
         currencyRepository.deleteById(id);
         return ResponseEntity.ok().build();
     }
+    @PostMapping("/{id}/set-default")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<Currency> setDefaultCurrency(@PathVariable java.util.UUID id) {
+        List<Currency> allCurrencies = currencyRepository.findAll();
+        Currency target = null;
+        for (Currency c : allCurrencies) {
+            boolean isTarget = c.getId().equals(id);
+            c.setIsSystemDefault(isTarget);
+            if (isTarget) {
+                target = c;
+            }
+        }
+        if (target == null) {
+            throw new IllegalArgumentException("Devise introuvable");
+        }
+        currencyRepository.saveAll(allCurrencies);
+        return ResponseEntity.ok(target);
+    }
 }

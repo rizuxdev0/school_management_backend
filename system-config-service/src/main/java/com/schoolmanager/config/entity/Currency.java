@@ -41,4 +41,8 @@ public class Currency {
     @Builder.Default
     @Column(name = "is_active")
     private Boolean isActive = true;
+
+    @Builder.Default
+    @Column(name = "is_system_default")
+    private Boolean isSystemDefault = false;
 }

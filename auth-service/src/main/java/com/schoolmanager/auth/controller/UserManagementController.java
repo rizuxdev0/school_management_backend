@@ -1,8 +1,10 @@
 package com.schoolmanager.auth.controller;
 
+import com.schoolmanager.auth.entity.Permission;
 import com.schoolmanager.auth.entity.Role;
 import com.schoolmanager.auth.entity.Tenant;
 import com.schoolmanager.auth.entity.User;
+import com.schoolmanager.auth.repository.PermissionRepository;
 import com.schoolmanager.auth.repository.RoleRepository;
 import com.schoolmanager.auth.repository.TenantRepository;
 import com.schoolmanager.auth.repository.UserRepository;
@@ -17,7 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Contrôleur REST pour la gestion administrative des utilisateurs et des professeurs.
+ * Contrôleur REST pour la gestion administrative des utilisateurs, des professeurs, des rôles et des permissions.
  */
 @RestController
 @RequestMapping("/api/v1/auth/users")
@@ -26,6 +28,7 @@ public class UserManagementController {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final PermissionRepository permissionRepository;
     private final TenantRepository tenantRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -113,5 +116,55 @@ public class UserManagementController {
     @GetMapping("/roles/tenant/{tenantId}")
     public ResponseEntity<List<Role>> getAvailableRoles(@PathVariable UUID tenantId) {
         return ResponseEntity.ok(roleRepository.findByTenantIdOrIsSystemRoleTrue(tenantId));
+    }
+
+    // ==================== GESTION DES RÔLES ET PERMISSIONS (NOUVEAU) ====================
+
+    @GetMapping("/permissions")
+    public ResponseEntity<List<Permission>> getAllPermissions() {
+        return ResponseEntity.ok(permissionRepository.findAll());
+    }
+
+    @PostMapping("/roles")
+    public ResponseEntity<Role> saveRole(@RequestBody Role roleRequest) {
+        if (roleRequest.getId() != null) {
+            Role existing = roleRepository.findById(roleRequest.getId())
+                    .orElseThrow(() -> new IllegalArgumentException("Rôle introuvable"));
+            existing.setNameFr(roleRequest.getNameFr());
+            existing.setNameEn(roleRequest.getNameEn() != null ? roleRequest.getNameEn() : roleRequest.getNameFr());
+            
+            // Map permissions
+            if (roleRequest.getPermissions() != null) {
+                Set<Permission> perms = new HashSet<>();
+                for (Permission p : roleRequest.getPermissions()) {
+                    permissionRepository.findById(p.getId()).ifPresent(perms::add);
+                }
+                existing.setPermissions(perms);
+            }
+            return ResponseEntity.ok(roleRepository.save(existing));
+        }
+
+        // Association du tenant
+        if (roleRequest.getTenant() != null && roleRequest.getTenant().getId() != null) {
+            Tenant tenant = tenantRepository.findById(roleRequest.getTenant().getId())
+                    .orElseThrow(() -> new IllegalArgumentException("Tenant introuvable"));
+            roleRequest.setTenant(tenant);
+        }
+
+        if (roleRequest.getPermissions() != null) {
+            Set<Permission> perms = new HashSet<>();
+            for (Permission p : roleRequest.getPermissions()) {
+                permissionRepository.findById(p.getId()).ifPresent(perms::add);
+            }
+            roleRequest.setPermissions(perms);
+        }
+
+        return ResponseEntity.ok(roleRepository.save(roleRequest));
+    }
+
+    @DeleteMapping("/roles/{id}")
+    public ResponseEntity<Void> deleteRole(@PathVariable UUID id) {
+        roleRepository.deleteById(id);
+        return ResponseEntity.noContent().build();
     }
 }

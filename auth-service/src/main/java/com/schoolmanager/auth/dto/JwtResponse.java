@@ -14,6 +14,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class JwtResponse {
     private String token;
+    @Builder.Default
     private String type = "Bearer";
     private UUID userId;
     private String username;
@@ -26,4 +27,11 @@ public class JwtResponse {
     private List<String> roles;
     private List<String> permissions;
     private List<String> enabledModules; // Modules souscrits par cet établissement (SaaS)
+    private String planCode;
+    private Integer maxStudents;
+    private Integer maxStaff;
+    private Integer maxClassrooms;
+    private Integer maxBooks;
+    private String logoUrl;
+    private String primaryColor;
 }

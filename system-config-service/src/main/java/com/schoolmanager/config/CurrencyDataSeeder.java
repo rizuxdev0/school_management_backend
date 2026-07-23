@@ -28,7 +28,7 @@ public class CurrencyDataSeeder implements CommandLineRunner {
             List<Currency> defaultCurrencies = Arrays.asList(
                 Currency.builder().code("USD").symbol("$").nameFr("Dollar américain").nameEn("US Dollar").decimalDigits(2).exchangeRate(new java.math.BigDecimal("1.08")).isActive(true).build(),
                 Currency.builder().code("EUR").symbol("€").nameFr("Euro").nameEn("Euro").decimalDigits(2).exchangeRate(new java.math.BigDecimal("1.0")).isActive(true).build(),
-                Currency.builder().code("XOF").symbol("F CFA").nameFr("Franc CFA (BCEAO)").nameEn("CFA Franc (BCEAO)").decimalDigits(0).exchangeRate(new java.math.BigDecimal("655.957")).isActive(true).build(),
+                Currency.builder().code("XOF").symbol("F CFA").nameFr("Franc CFA (BCEAO)").nameEn("CFA Franc (BCEAO)").decimalDigits(0).exchangeRate(new java.math.BigDecimal("655.957")).isActive(true).isSystemDefault(true).build(),
                 Currency.builder().code("CAD").symbol("C$").nameFr("Dollar canadien").nameEn("Canadian Dollar").decimalDigits(2).exchangeRate(new java.math.BigDecimal("1.48")).isActive(true).build(),
                 Currency.builder().code("GBP").symbol("£").nameFr("Livre sterling").nameEn("British Pound").decimalDigits(2).exchangeRate(new java.math.BigDecimal("0.84")).isActive(true).build(),
                 Currency.builder().code("CHF").symbol("CHF").nameFr("Franc suisse").nameEn("Swiss Franc").decimalDigits(2).exchangeRate(new java.math.BigDecimal("0.96")).isActive(true).build(),

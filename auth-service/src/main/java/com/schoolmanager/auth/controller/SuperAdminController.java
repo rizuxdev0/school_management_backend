@@ -56,4 +56,27 @@ public class SuperAdminController {
     public ResponseEntity<FeatureModule> createFeatureModule(@RequestBody FeatureModule module) {
         return ResponseEntity.ok(featureModuleRepository.save(module));
     }
+    @PutMapping("/tenants/{tenantId}/limits")
+    public ResponseEntity<Tenant> updateTenantLimits(
+            @PathVariable UUID tenantId,
+            @RequestBody Tenant limitsDto) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new RuntimeException("Tenant introuvable"));
+        tenant.setMaxStudents(limitsDto.getMaxStudents());
+        tenant.setMaxStaff(limitsDto.getMaxStaff());
+        tenant.setMaxClassrooms(limitsDto.getMaxClassrooms());
+        tenant.setMaxBooks(limitsDto.getMaxBooks());
+        if (limitsDto.getPlanCode() != null) {
+            if (!limitsDto.getPlanCode().equals(tenant.getPlanCode())) {
+                tenant.setPlanCode(limitsDto.getPlanCode());
+                subscriptionPlanRepository.findByCode(limitsDto.getPlanCode()).ifPresent(plan -> {
+                    tenant.setEnabledModules(new java.util.HashSet<>(plan.getIncludedModules()));
+                });
+            }
+        }
+        if (limitsDto.getSubscriptionExpiresAt() != null) {
+            tenant.setSubscriptionExpiresAt(limitsDto.getSubscriptionExpiresAt());
+        }
+        return ResponseEntity.ok(tenantRepository.save(tenant));
+    }
 }

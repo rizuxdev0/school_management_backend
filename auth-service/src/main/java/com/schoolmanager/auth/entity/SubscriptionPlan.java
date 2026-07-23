@@ -45,6 +45,12 @@ public class SubscriptionPlan {
     @Column(name = "max_staff")
     private Integer maxStaff;
 
+    @Column(name = "max_classrooms")
+    private Integer maxClassrooms;
+
+    @Column(name = "max_books")
+    private Integer maxBooks;
+
     @Builder.Default
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;

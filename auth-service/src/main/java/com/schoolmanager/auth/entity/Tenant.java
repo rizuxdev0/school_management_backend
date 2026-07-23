@@ -35,6 +35,30 @@ public class Tenant {
     @Column(name = "domain_name", length = 100)
     private String domainName;
 
+    @Column(name = "plan_code", length = 50)
+    private String planCode; // ex: STARTER, PRO, ENTERPRISE, CUSTOM
+
+    @Column(name = "max_students")
+    private Integer maxStudents;
+
+    @Column(name = "max_staff")
+    private Integer maxStaff;
+
+    @Column(name = "subscription_expires_at")
+    private java.time.ZonedDateTime subscriptionExpiresAt;
+
+    @Column(name = "logo_url", columnDefinition = "TEXT")
+    private String logoUrl;
+
+    @Column(name = "primary_color", length = 7)
+    private String primaryColor;
+
+    @Column(name = "max_classrooms")
+    private Integer maxClassrooms;
+
+    @Column(name = "max_books")
+    private Integer maxBooks;
+
     @Builder.Default
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
