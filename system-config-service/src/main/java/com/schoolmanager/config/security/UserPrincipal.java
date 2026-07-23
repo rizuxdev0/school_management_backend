@@ -1,0 +1,12 @@
+package com.schoolmanager.config.security;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+@Getter
+@AllArgsConstructor
+public class UserPrincipal {
+    private final String username;
+    private final String tenantId;
+    private final Boolean isSuperAdmin;
+}

@@ -128,6 +128,24 @@ public class DatabaseSeeder implements CommandLineRunner {
                     .build());
         }
 
+        // S'assurer que le plan UNLIMITED existe toujours (indépendamment du premier lancement)
+        if (!subscriptionPlanRepository.findByCode("UNLIMITED").isPresent()) {
+            log.info("Création forcée du plan d'abonnement UNLIMITED...");
+            List<FeatureModule> allModules = featureModuleRepository.findAll();
+            subscriptionPlanRepository.save(SubscriptionPlan.builder()
+                    .code("UNLIMITED")
+                    .nameFr("Pack Illimité")
+                    .nameEn("Unlimited Pack")
+                    .priceMonthly(new BigDecimal("0.00"))
+                    .priceYearly(new BigDecimal("0.00"))
+                    .maxStudents(999999)
+                    .maxStaff(99999)
+                    .maxClassrooms(99999)
+                    .maxBooks(99999)
+                    .includedModules(new HashSet<>(allModules))
+                    .build());
+        }
+
         // 3. Initialisation des Permissions système
         if (permissionRepository.count() == 0) {
             log.info("Création du catalogue des permissions système...");

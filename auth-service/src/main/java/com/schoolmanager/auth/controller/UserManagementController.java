@@ -9,9 +9,13 @@ import com.schoolmanager.auth.repository.RoleRepository;
 import com.schoolmanager.auth.repository.TenantRepository;
 import com.schoolmanager.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashSet;
 import java.util.List;
@@ -20,6 +24,7 @@ import java.util.UUID;
 
 /**
  * Contrôleur REST pour la gestion administrative des utilisateurs, des professeurs, des rôles et des permissions.
+ * Sécurisé avec @PreAuthorize et isolation multi-tenant forcée depuis la session utilisateur.
  */
 @RestController
 @RequestMapping("/api/v1/auth/users")
@@ -32,28 +37,65 @@ public class UserManagementController {
     private final TenantRepository tenantRepository;
     private final PasswordEncoder passwordEncoder;
 
+    // Helper pour récupérer l'utilisateur connecté
+    private User getCurrentUser() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof User) {
+            return (User) principal;
+        }
+        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Non authentifié");
+    }
+
+    // Helper pour valider l'appartenance tenant
+    private void assertOwnership(UUID entityTenantId) {
+        User currentUser = getCurrentUser();
+        if (Boolean.TRUE.equals(currentUser.getIsSuperAdmin())) {
+            return; // Super Admin exempté
+        }
+        if (currentUser.getTenant() == null || !currentUser.getTenant().getId().equals(entityTenantId)) {
+            throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Accès refusé : cette ressource n'appartient pas à votre établissement"
+            );
+        }
+    }
+
     // ==================== LISTER LES UTILISATEURS ====================
 
     @GetMapping("/tenant/{tenantId}")
+    @PreAuthorize("hasAuthority('HR_VIEW')")
     public ResponseEntity<List<User>> getUsersByTenant(@PathVariable UUID tenantId) {
-        return ResponseEntity.ok(userRepository.findByTenantId(tenantId));
+        User currentUser = getCurrentUser();
+        UUID targetTenantId = Boolean.TRUE.equals(currentUser.getIsSuperAdmin()) ? tenantId : currentUser.getTenant().getId();
+        return ResponseEntity.ok(userRepository.findByTenantId(targetTenantId));
     }
 
     @GetMapping("/tenant/{tenantId}/role/{roleCode}")
+    @PreAuthorize("hasAuthority('HR_VIEW')")
     public ResponseEntity<List<User>> getUsersByRole(
             @PathVariable UUID tenantId,
             @PathVariable String roleCode) {
-        return ResponseEntity.ok(userRepository.findByTenantIdAndRolesCode(tenantId, roleCode));
+        User currentUser = getCurrentUser();
+        UUID targetTenantId = Boolean.TRUE.equals(currentUser.getIsSuperAdmin()) ? tenantId : currentUser.getTenant().getId();
+        return ResponseEntity.ok(userRepository.findByTenantIdAndRolesCode(targetTenantId, roleCode));
     }
 
     // ==================== SAUVEGARDER / MODIFIER UN UTILISATEUR ====================
 
     @PostMapping
+    @PreAuthorize("hasAuthority('HR_EDIT')")
     public ResponseEntity<User> saveUser(@RequestBody User userRequest) {
+        User currentUser = getCurrentUser();
+
         // En cas de modification d'un utilisateur existant
         if (userRequest.getId() != null) {
             User existing = userRepository.findById(userRequest.getId())
-                    .orElseThrow(() -> new IllegalArgumentException("Utilisateur introuvable"));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Utilisateur introuvable"));
+
+            // Vérification de sécurité multi-tenant
+            if (existing.getTenant() != null) {
+                assertOwnership(existing.getTenant().getId());
+            }
 
             existing.setFirstName(userRequest.getFirstName());
             existing.setLastName(userRequest.getLastName());
@@ -71,7 +113,13 @@ public class UserManagementController {
             if (userRequest.getRoles() != null) {
                 Set<Role> roles = new HashSet<>();
                 for (Role r : userRequest.getRoles()) {
-                    roleRepository.findById(r.getId()).ifPresent(roles::add);
+                    roleRepository.findById(r.getId()).ifPresent(role -> {
+                        // Un tenant ne peut pas attribuer un rôle appartenant à un autre tenant
+                        if (role.getTenant() != null) {
+                            assertOwnership(role.getTenant().getId());
+                        }
+                        roles.add(role);
+                    });
                 }
                 existing.setRoles(roles);
             }
@@ -84,18 +132,27 @@ public class UserManagementController {
             userRequest.setPasswordHash(passwordEncoder.encode(userRequest.getPasswordHash()));
         }
 
-        // Association du tenant
-        if (userRequest.getTenant() != null && userRequest.getTenant().getId() != null) {
-            Tenant tenant = tenantRepository.findById(userRequest.getTenant().getId())
-                    .orElseThrow(() -> new IllegalArgumentException("Tenant introuvable"));
-            userRequest.setTenant(tenant);
+        // Association forcée du tenant de l'utilisateur connecté (sauf si Super Admin)
+        if (Boolean.TRUE.equals(currentUser.getIsSuperAdmin())) {
+            if (userRequest.getTenant() != null && userRequest.getTenant().getId() != null) {
+                Tenant tenant = tenantRepository.findById(userRequest.getTenant().getId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant introuvable"));
+                userRequest.setTenant(tenant);
+            }
+        } else {
+            userRequest.setTenant(currentUser.getTenant());
         }
 
         // Liaison des rôles
         if (userRequest.getRoles() != null) {
             Set<Role> roles = new HashSet<>();
             for (Role r : userRequest.getRoles()) {
-                roleRepository.findById(r.getId()).ifPresent(roles::add);
+                roleRepository.findById(r.getId()).ifPresent(role -> {
+                    if (role.getTenant() != null) {
+                        assertOwnership(role.getTenant().getId());
+                    }
+                    roles.add(role);
+                });
             }
             userRequest.setRoles(roles);
         }
@@ -106,7 +163,15 @@ public class UserManagementController {
     // ==================== SUPPRIMER UN UTILISATEUR ====================
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('HR_EDIT')")
     public ResponseEntity<Void> deleteUser(@PathVariable UUID id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Utilisateur introuvable"));
+        
+        if (user.getTenant() != null) {
+            assertOwnership(user.getTenant().getId());
+        }
+        
         userRepository.deleteById(id);
         return ResponseEntity.noContent().build();
     }
@@ -114,24 +179,37 @@ public class UserManagementController {
     // ==================== RÉCUPÉRER LES RÔLES DISPONIBLES ====================
 
     @GetMapping("/roles/tenant/{tenantId}")
+    @PreAuthorize("hasAuthority('HR_VIEW')")
     public ResponseEntity<List<Role>> getAvailableRoles(@PathVariable UUID tenantId) {
-        return ResponseEntity.ok(roleRepository.findByTenantIdOrIsSystemRoleTrue(tenantId));
+        User currentUser = getCurrentUser();
+        UUID targetTenantId = Boolean.TRUE.equals(currentUser.getIsSuperAdmin()) ? tenantId : currentUser.getTenant().getId();
+        return ResponseEntity.ok(roleRepository.findByTenantIdOrIsSystemRoleTrue(targetTenantId));
     }
 
-    // ==================== GESTION DES RÔLES ET PERMISSIONS (NOUVEAU) ====================
+    // ==================== GESTION DES RÔLES ET PERMISSIONS ====================
 
     @GetMapping("/permissions")
+    @PreAuthorize("hasAuthority('HR_VIEW')")
     public ResponseEntity<List<Permission>> getAllPermissions() {
         return ResponseEntity.ok(permissionRepository.findAll());
     }
 
     @PostMapping("/roles")
+    @PreAuthorize("hasAuthority('HR_EDIT')")
     public ResponseEntity<Role> saveRole(@RequestBody Role roleRequest) {
+        User currentUser = getCurrentUser();
+
         if (roleRequest.getId() != null) {
             Role existing = roleRepository.findById(roleRequest.getId())
-                    .orElseThrow(() -> new IllegalArgumentException("Rôle introuvable"));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Rôle introuvable"));
+            
+            if (existing.getTenant() != null) {
+                assertOwnership(existing.getTenant().getId());
+            }
+
             existing.setNameFr(roleRequest.getNameFr());
             existing.setNameEn(roleRequest.getNameEn() != null ? roleRequest.getNameEn() : roleRequest.getNameFr());
+            existing.setDescription(roleRequest.getDescription());
             
             // Map permissions
             if (roleRequest.getPermissions() != null) {
@@ -144,11 +222,15 @@ public class UserManagementController {
             return ResponseEntity.ok(roleRepository.save(existing));
         }
 
-        // Association du tenant
-        if (roleRequest.getTenant() != null && roleRequest.getTenant().getId() != null) {
-            Tenant tenant = tenantRepository.findById(roleRequest.getTenant().getId())
-                    .orElseThrow(() -> new IllegalArgumentException("Tenant introuvable"));
-            roleRequest.setTenant(tenant);
+        // Association forcée du tenant
+        if (Boolean.TRUE.equals(currentUser.getIsSuperAdmin())) {
+            if (roleRequest.getTenant() != null && roleRequest.getTenant().getId() != null) {
+                Tenant tenant = tenantRepository.findById(roleRequest.getTenant().getId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant introuvable"));
+                roleRequest.setTenant(tenant);
+            }
+        } else {
+            roleRequest.setTenant(currentUser.getTenant());
         }
 
         if (roleRequest.getPermissions() != null) {
@@ -163,7 +245,15 @@ public class UserManagementController {
     }
 
     @DeleteMapping("/roles/{id}")
+    @PreAuthorize("hasAuthority('HR_EDIT')")
     public ResponseEntity<Void> deleteRole(@PathVariable UUID id) {
+        Role role = roleRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Rôle introuvable"));
+        
+        if (role.getTenant() != null) {
+            assertOwnership(role.getTenant().getId());
+        }
+        
         roleRepository.deleteById(id);
         return ResponseEntity.noContent().build();
     }

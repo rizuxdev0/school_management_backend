@@ -8,15 +8,23 @@ import com.schoolmanager.config.repository.BookLoanRepository;
 import com.schoolmanager.config.repository.BookRepository;
 import com.schoolmanager.config.repository.ExamConvocationRepository;
 import com.schoolmanager.config.repository.ExamSessionRepository;
+import com.schoolmanager.config.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Contrôleur REST pour les examens (sessions, convocations) et la bibliothèque (livres, prêts).
+ * Supporte le bypass Super Admin et prévient les attaques IDOR.
+ */
 @RestController
 @RequestMapping("/api/v1/system/exams-library")
 @RequiredArgsConstructor
@@ -30,17 +38,27 @@ public class ExamsAndLibraryController {
     // ==================== 1. SESSIONS D'EXAMENS ====================
 
     @GetMapping("/exams/sessions/tenant/{tenantId}")
+    @PreAuthorize("hasAuthority('EXAMS_VIEW')")
     public ResponseEntity<List<ExamSession>> getExamSessions(@PathVariable UUID tenantId) {
-        return ResponseEntity.ok(examSessionRepository.findByTenantId(tenantId));
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        return ResponseEntity.ok(examSessionRepository.findByTenantId(jwtTenantId));
     }
 
     @PostMapping("/exams/sessions")
+    @PreAuthorize("hasAuthority('EXAMS_EDIT')")
     public ResponseEntity<ExamSession> saveExamSession(@RequestBody ExamSession session) {
+        if (!SecurityUtils.isSuperAdmin()) {
+            session.setTenantId(SecurityUtils.getCurrentTenantId());
+        }
         return ResponseEntity.ok(examSessionRepository.save(session));
     }
 
     @DeleteMapping("/exams/sessions/{id}")
+    @PreAuthorize("hasAuthority('EXAMS_EDIT')")
     public ResponseEntity<Void> deleteExamSession(@PathVariable UUID id) {
+        ExamSession session = examSessionRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session d'examen introuvable"));
+        SecurityUtils.assertOwnership(session.getTenantId());
         examSessionRepository.deleteById(id);
         return ResponseEntity.noContent().build();
     }
@@ -48,13 +66,14 @@ public class ExamsAndLibraryController {
     // ==================== 2. CONVOCATIONS AUX EXAMENS ====================
 
     @GetMapping("/exams/convocations/session/{sessionId}")
+    @PreAuthorize("hasAuthority('EXAMS_VIEW')")
     public ResponseEntity<List<ExamConvocation>> getConvocations(@PathVariable UUID sessionId) {
         return ResponseEntity.ok(examConvocationRepository.findByExamSessionId(sessionId));
     }
 
     @PostMapping("/exams/convocations")
+    @PreAuthorize("hasAuthority('EXAMS_EDIT')")
     public ResponseEntity<ExamConvocation> saveConvocation(@RequestBody ExamConvocation convocation) {
-        // Unique check to update if already exists
         Optional<ExamConvocation> existing = examConvocationRepository.findByStudentIdAndExamSessionId(
                 convocation.getStudent().getId(),
                 convocation.getExamSession().getId()
@@ -71,6 +90,7 @@ public class ExamsAndLibraryController {
     }
 
     @DeleteMapping("/exams/convocations/{id}")
+    @PreAuthorize("hasAuthority('EXAMS_EDIT')")
     public ResponseEntity<Void> deleteConvocation(@PathVariable UUID id) {
         examConvocationRepository.deleteById(id);
         return ResponseEntity.noContent().build();
@@ -79,12 +99,18 @@ public class ExamsAndLibraryController {
     // ==================== 3. CATALOGUE DE LA BIBLIOTHÈQUE ====================
 
     @GetMapping("/library/books/tenant/{tenantId}")
+    @PreAuthorize("hasAuthority('LIBRARY_VIEW')")
     public ResponseEntity<List<Book>> getBooks(@PathVariable UUID tenantId) {
-        return ResponseEntity.ok(bookRepository.findByTenantId(tenantId));
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        return ResponseEntity.ok(bookRepository.findByTenantId(jwtTenantId));
     }
 
     @PostMapping("/library/books")
+    @PreAuthorize("hasAuthority('LIBRARY_EDIT')")
     public ResponseEntity<Book> saveBook(@RequestBody Book book) {
+        if (!SecurityUtils.isSuperAdmin()) {
+            book.setTenantId(SecurityUtils.getCurrentTenantId());
+        }
         if (book.getId() == null) {
             book.setCopiesAvailable(book.getCopiesTotal());
         }
@@ -92,7 +118,11 @@ public class ExamsAndLibraryController {
     }
 
     @DeleteMapping("/library/books/{id}")
+    @PreAuthorize("hasAuthority('LIBRARY_EDIT')")
     public ResponseEntity<Void> deleteBook(@PathVariable UUID id) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Livre introuvable"));
+        SecurityUtils.assertOwnership(book.getTenantId());
         bookRepository.deleteById(id);
         return ResponseEntity.noContent().build();
     }
@@ -100,22 +130,24 @@ public class ExamsAndLibraryController {
     // ==================== 4. PRÊTS & RETOURS DE LIVRES ====================
 
     @GetMapping("/library/loans/tenant/{tenantId}")
+    @PreAuthorize("hasAuthority('LIBRARY_VIEW')")
     public ResponseEntity<List<BookLoan>> getBookLoans(@PathVariable UUID tenantId) {
-        return ResponseEntity.ok(bookLoanRepository.findByTenantId(tenantId));
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        return ResponseEntity.ok(bookLoanRepository.findByTenantId(jwtTenantId));
     }
 
     @PostMapping("/library/loans")
+    @PreAuthorize("hasAuthority('LIBRARY_EDIT')")
     public ResponseEntity<BookLoan> saveBookLoan(@RequestBody BookLoan loan) {
         // En cas de retour de livre (restitution)
         if (loan.getId() != null) {
             BookLoan existing = bookLoanRepository.findById(loan.getId())
-                    .orElseThrow(() -> new IllegalArgumentException("Prêt introuvable"));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Prêt introuvable"));
+            SecurityUtils.assertOwnership(existing.getTenantId());
 
             if ("ACTIVE".equals(existing.getStatus()) && "RETURNED".equals(loan.getStatus())) {
                 existing.setStatus("RETURNED");
                 existing.setReturnDate(LocalDate.now());
-
-                // Increment available copies of the book
                 Book book = existing.getBook();
                 book.setCopiesAvailable(book.getCopiesAvailable() + 1);
                 bookRepository.save(book);
@@ -123,23 +155,31 @@ public class ExamsAndLibraryController {
             return ResponseEntity.ok(bookLoanRepository.save(existing));
         }
 
-        // Nouveau prêt : décrémenter le nombre d'exemplaires disponibles
+        // Nouveau prêt : vérifier le livre et décrémenter les exemplaires disponibles
         Book book = bookRepository.findById(loan.getBook().getId())
-                .orElseThrow(() -> new IllegalArgumentException("Livre introuvable"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Livre introuvable"));
+        SecurityUtils.assertOwnership(book.getTenantId());
 
         if (book.getCopiesAvailable() <= 0) {
-            throw new IllegalStateException("Aucun exemplaire disponible pour cet ouvrage.");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Aucun exemplaire disponible pour cet ouvrage.");
         }
 
         book.setCopiesAvailable(book.getCopiesAvailable() - 1);
         bookRepository.save(book);
 
+        if (!SecurityUtils.isSuperAdmin()) {
+            loan.setTenantId(SecurityUtils.getCurrentTenantId());
+        }
         loan.setStatus("ACTIVE");
         return ResponseEntity.ok(bookLoanRepository.save(loan));
     }
 
     @DeleteMapping("/library/loans/{id}")
+    @PreAuthorize("hasAuthority('LIBRARY_EDIT')")
     public ResponseEntity<Void> deleteBookLoan(@PathVariable UUID id) {
+        BookLoan loan = bookLoanRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Prêt introuvable"));
+        SecurityUtils.assertOwnership(loan.getTenantId());
         bookLoanRepository.deleteById(id);
         return ResponseEntity.noContent().build();
     }

@@ -44,6 +44,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     List<SimpleGrantedAuthority> authorities = new ArrayList<>();
                     if (Boolean.TRUE.equals(user.getIsSuperAdmin())) {
                         authorities.add(new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"));
+                        authorities.add(new SimpleGrantedAuthority("ACADEMIC_VIEW"));
+                        authorities.add(new SimpleGrantedAuthority("ACADEMIC_EDIT"));
+                        authorities.add(new SimpleGrantedAuthority("EVALUATION_VIEW"));
+                        authorities.add(new SimpleGrantedAuthority("EVALUATION_EDIT"));
+                        authorities.add(new SimpleGrantedAuthority("ATTENDANCE_VIEW"));
+                        authorities.add(new SimpleGrantedAuthority("ATTENDANCE_EDIT"));
+                        authorities.add(new SimpleGrantedAuthority("FINANCE_VIEW"));
+                        authorities.add(new SimpleGrantedAuthority("FINANCE_EDIT"));
+                        authorities.add(new SimpleGrantedAuthority("HR_VIEW"));
+                        authorities.add(new SimpleGrantedAuthority("HR_EDIT"));
+                        authorities.add(new SimpleGrantedAuthority("MEDICAL_VIEW"));
+                        authorities.add(new SimpleGrantedAuthority("MEDICAL_EDIT"));
+                        authorities.add(new SimpleGrantedAuthority("DISCIPLINE_VIEW"));
+                        authorities.add(new SimpleGrantedAuthority("DISCIPLINE_EDIT"));
+                        authorities.add(new SimpleGrantedAuthority("EXAMS_VIEW"));
+                        authorities.add(new SimpleGrantedAuthority("EXAMS_EDIT"));
+                        authorities.add(new SimpleGrantedAuthority("LIBRARY_VIEW"));
+                        authorities.add(new SimpleGrantedAuthority("LIBRARY_EDIT"));
                     }
                     if (user.getRoles() != null) {
                         user.getRoles().forEach(role -> {

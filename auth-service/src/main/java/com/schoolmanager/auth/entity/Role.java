@@ -22,6 +22,7 @@ public class Role {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tenant_id")
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Tenant tenant;
 
     @Column(nullable = false, length = 50)
@@ -36,6 +37,12 @@ public class Role {
     @Builder.Default
     @Column(name = "is_system_role", nullable = false)
     private Boolean isSystemRole = false;
+
+    @Column(name = "description", length = 255)
+    private String description;
+
+    @org.hibernate.annotations.Formula("(SELECT COUNT(*) FROM user_roles ur WHERE ur.role_id = id)")
+    private Integer userCount;
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(

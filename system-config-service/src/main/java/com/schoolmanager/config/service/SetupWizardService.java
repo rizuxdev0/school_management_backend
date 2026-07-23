@@ -24,6 +24,7 @@ public class SetupWizardService {
     private final AcademicYearRepository academicYearRepository;
     private final AcademicPeriodRepository academicPeriodRepository;
     private final GradingSystemRepository gradingSystemRepository;
+    private final ClassroomRepository classroomRepository;
 
     @Transactional
     public void setupInstitution(SetupWizardDto dto) {
@@ -146,33 +147,100 @@ public class SetupWizardService {
     }
 
     private void createFrenchPreset(UUID tenantId) {
-        // Primaire
+        // 1. Primaire (Togo / Francophone : CP1, CP2, CE1, CE2, CM1, CM2)
         AcademicCycle prim = academicCycleRepository.save(AcademicCycle.builder()
-                .tenantId(tenantId).code("PRIMARY").nameFr("Primaire").nameEn("Primary").sequenceOrder(1).build());
-        String[] primLevels = {"CP", "CE1", "CE2", "CM1", "CM2"};
+                .tenantId(tenantId).code("PRIMARY").nameFr("Primaire").nameEn("Primary School").sequenceOrder(1).build());
+        String[] primLevels = {"CP1", "CP2", "CE1", "CE2", "CM1", "CM2"};
+        String[] primNames = {"Cours Préparatoire 1ère année", "Cours Préparatoire 2ème année", "Cours Élémentaire 1ère année", "Cours Élémentaire 2ème année", "Cours Moyen 1ère année", "Cours Moyen 2ème année"};
         for (int i = 0; i < primLevels.length; i++) {
-            academicLevelRepository.save(AcademicLevel.builder()
-                    .tenantId(tenantId).cycle(prim).code(primLevels[i]).nameFr(primLevels[i]).nameEn(primLevels[i]).sequenceOrder(i + 1).build());
+            AcademicLevel lvl = academicLevelRepository.save(AcademicLevel.builder()
+                    .tenantId(tenantId).cycle(prim).code(primLevels[i]).nameFr(primNames[i]).nameEn(primLevels[i]).sequenceOrder(i + 1).build());
+            
+            // Classes CP1-A, CP1-B, etc.
+            classroomRepository.save(Classroom.builder()
+                    .tenantId(tenantId).code(primLevels[i] + "-A").name(primLevels[i] + " - Classe A").academicLevel(lvl).capacity(40).isActive(true).build());
+            classroomRepository.save(Classroom.builder()
+                    .tenantId(tenantId).code(primLevels[i] + "-B").name(primLevels[i] + " - Classe B").academicLevel(lvl).capacity(40).isActive(true).build());
         }
 
-        // Collège
+        // 2. Collège (6ème, 5ème, 4ème, 3ème)
         AcademicCycle mid = academicCycleRepository.save(AcademicCycle.builder()
                 .tenantId(tenantId).code("MIDDLE").nameFr("Collège").nameEn("Middle School").sequenceOrder(2).build());
         String[] midLevels = {"6EME", "5EME", "4EME", "3EME"};
         String[] midNames = {"6ème", "5ème", "4ème", "3ème"};
         for (int i = 0; i < midLevels.length; i++) {
-            academicLevelRepository.save(AcademicLevel.builder()
+            AcademicLevel lvl = academicLevelRepository.save(AcademicLevel.builder()
                     .tenantId(tenantId).cycle(mid).code(midLevels[i]).nameFr(midNames[i]).nameEn(midNames[i]).sequenceOrder(i + 1).build());
+            
+            // Classes 6e A, 6e B, etc.
+            classroomRepository.save(Classroom.builder()
+                    .tenantId(tenantId).code(midLevels[i] + "-A").name(midNames[i] + " A").academicLevel(lvl).capacity(45).isActive(true).build());
+            classroomRepository.save(Classroom.builder()
+                    .tenantId(tenantId).code(midLevels[i] + "-B").name(midNames[i] + " B").academicLevel(lvl).capacity(45).isActive(true).build());
         }
 
-        // Lycée
+        // 3. Lycée (Togo : Secondes L/S, Premières et Terminales Séries A4/D/C)
         AcademicCycle high = academicCycleRepository.save(AcademicCycle.builder()
                 .tenantId(tenantId).code("HIGH").nameFr("Lycée").nameEn("High School").sequenceOrder(3).build());
-        String[] highLevels = {"2ND", "1ERE", "TERM"};
-        String[] highNames = {"Seconde", "Première", "Terminale"};
+        String[] highLevels = {"2ND_LE", "2ND_S", "1ERE_A4", "1ERE_D", "1ERE_C", "TLE_A4", "TLE_D", "TLE_C"};
+        String[] highNames = {"Seconde Littéraire", "Seconde Scientifique", "Première A4", "Première D", "Première C", "Terminale A4", "Terminale D", "Terminale C"};
         for (int i = 0; i < highLevels.length; i++) {
-            academicLevelRepository.save(AcademicLevel.builder()
+            AcademicLevel lvl = academicLevelRepository.save(AcademicLevel.builder()
                     .tenantId(tenantId).cycle(high).code(highLevels[i]).nameFr(highNames[i]).nameEn(highNames[i]).sequenceOrder(i + 1).build());
+            
+            // Classes (ex: Tle D1, Tle C1)
+            classroomRepository.save(Classroom.builder()
+                    .tenantId(tenantId).code(highLevels[i] + "-1").name(highNames[i] + " 1").academicLevel(lvl).capacity(50).isActive(true).build());
+        }
+
+        // 4. Université / Campus (Système LMD : Licence L1-L3, Master M1-M2)
+        AcademicCycle licenceCycle = academicCycleRepository.save(AcademicCycle.builder()
+                .tenantId(tenantId).code("CAMPUS_LICENCE").nameFr("Enseignement Supérieur (Licence)").nameEn("University (Bachelor)").sequenceOrder(4).build());
+        AcademicCycle masterCycle = academicCycleRepository.save(AcademicCycle.builder()
+                .tenantId(tenantId).code("CAMPUS_MASTER").nameFr("Enseignement Supérieur (Master)").nameEn("University (Master)").sequenceOrder(5).build());
+
+        // Filières professionnelles types d'Afrique de l'Ouest
+        String[] tracks = {"GL", "FCG", "RIT", "MKT"};
+        String[] trackNames = {"Génie Logiciel", "Finance Comptabilité & Gestion", "Réseaux & Informatique Télécoms", "Marketing & Communication"};
+
+        // Niveaux Licence (L1, L2, L3)
+        String[] lLevels = {"L1", "L2", "L3"};
+        String[] lNames = {"Licence 1ère année", "Licence 2ème année", "Licence 3ème année"};
+        for (int i = 0; i < lLevels.length; i++) {
+            AcademicLevel lvl = academicLevelRepository.save(AcademicLevel.builder()
+                    .tenantId(tenantId).cycle(licenceCycle).code(lLevels[i]).nameFr(lNames[i]).nameEn(lLevels[i]).sequenceOrder(i + 1).build());
+            
+            // Création des filières sous forme de classes physiques (ex: L1 Génie Logiciel)
+            for (int t = 0; t < tracks.length; t++) {
+                classroomRepository.save(Classroom.builder()
+                        .tenantId(tenantId)
+                        .code(lLevels[i] + "-" + tracks[t])
+                        .name(lLevels[i] + " - " + trackNames[t])
+                        .academicLevel(lvl)
+                        .capacity(60)
+                        .isActive(true)
+                        .build());
+            }
+        }
+
+        // Niveaux Master (M1, M2)
+        String[] mLevels = {"M1", "M2"};
+        String[] mNames = {"Master 1ère année", "Master 2ème année"};
+        for (int i = 0; i < mLevels.length; i++) {
+            AcademicLevel lvl = academicLevelRepository.save(AcademicLevel.builder()
+                    .tenantId(tenantId).cycle(masterCycle).code(mLevels[i]).nameFr(mNames[i]).nameEn(mLevels[i]).sequenceOrder(i + 1).build());
+            
+            // Création des filières sous forme de classes physiques (ex: M1 Génie Logiciel)
+            for (int t = 0; t < tracks.length; t++) {
+                classroomRepository.save(Classroom.builder()
+                        .tenantId(tenantId)
+                        .code(mLevels[i] + "-" + tracks[t])
+                        .name(mLevels[i] + " - " + trackNames[t])
+                        .academicLevel(lvl)
+                        .capacity(40)
+                        .isActive(true)
+                        .build());
+            }
         }
     }
 

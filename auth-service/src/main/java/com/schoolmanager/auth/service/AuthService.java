@@ -7,10 +7,8 @@ import com.schoolmanager.auth.entity.*;
 import com.schoolmanager.auth.repository.*;
 import com.schoolmanager.auth.security.JwtUtils;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,10 +27,31 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
 
+    /**
+     * Authentifie l'utilisateur et retourne un JWT complet avec tous ses droits.
+     */
     @Transactional
     public JwtResponse login(AuthRequest request) {
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
+        String username = request.getUsername();
+        User user;
+
+        if ("superadmin".equalsIgnoreCase(username != null ? username.trim() : "")) {
+            // Le Super Admin global système n'appartient à aucun tenant
+            user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
+        } else {
+            // Pour tous les autres utilisateurs, le code établissement est obligatoire
+            if (request.getTenantCode() == null || request.getTenantCode().trim().isEmpty()) {
+                throw new RuntimeException("Le code établissement est obligatoire");
+            }
+
+            String cleanCode = request.getTenantCode().trim();
+            Tenant tenant = tenantRepository.findByCode(cleanCode)
+                    .orElseThrow(() -> new RuntimeException("Code établissement incorrect ou introuvable"));
+
+            user = userRepository.findByTenantCodeAndUsername(tenant.getCode(), username)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur introuvable pour cet établissement"));
+        }
 
         if (!user.getIsActive() || !user.getIsAccountNonLocked()) {
             throw new RuntimeException("Compte désactivé ou verrouillé");
@@ -42,24 +61,56 @@ public class AuthService {
             throw new RuntimeException("Mot de passe incorrect");
         }
 
+        return buildJwtResponse(user);
+    }
+
+    /**
+     * Recharge toutes les données de l'utilisateur depuis la base de données
+     * (tenant, modules activés, quotas du plan, rôles, permissions) et réémet
+     * un nouveau JWT frais. Utilisé pour éviter la déconnexion après un changement
+     * de plan ou de droits par le Super Admin.
+     *
+     * @param username le nom d'utilisateur extrait du JWT courant (via SecurityContext)
+     * @return un nouveau JwtResponse avec les données à jour
+     */
+    @Transactional
+    public JwtResponse refreshCurrentUser(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
+
+        if (!user.getIsActive() || !user.getIsAccountNonLocked()) {
+            throw new RuntimeException("Compte désactivé ou verrouillé");
+        }
+
+        return buildJwtResponse(user);
+    }
+
+    /**
+     * Construit le JwtResponse complet à partir d'un utilisateur chargé depuis la DB.
+     * Mutualisé entre login() et refreshCurrentUser() pour éviter la duplication (DRY).
+     */
+    private JwtResponse buildJwtResponse(User user) {
         Tenant tenant = user.getTenant();
         List<String> enabledModules = new ArrayList<>();
+
         if (tenant != null) {
             if (!tenant.getIsActive()) {
                 throw new RuntimeException(
                         "L'établissement est suspendu ou désactivé. Veuillez contacter l'administrateur SVP !");
             }
-            if (tenant.getSubscriptionExpiresAt() != null && tenant.getSubscriptionExpiresAt().isBefore(java.time.ZonedDateTime.now())) {
+            if (tenant.getSubscriptionExpiresAt() != null &&
+                tenant.getSubscriptionExpiresAt().isBefore(java.time.ZonedDateTime.now())) {
                 throw new RuntimeException(
-                        "Votre abonnement SaaS a expiré le " + 
-                        tenant.getSubscriptionExpiresAt().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) + 
+                        "Votre abonnement SaaS a expiré le " +
+                        tenant.getSubscriptionExpiresAt().format(
+                                java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) +
                         ". Veuillez contacter le Super Admin pour renouveler votre licence SVP !");
             }
             enabledModules = tenant.getEnabledModules().stream()
                     .map(FeatureModule::getCode)
                     .toList();
         } else if (Boolean.TRUE.equals(user.getIsSuperAdmin())) {
-            // Super Admin a accès à TOUS les modules
+            // Le Super Admin a accès à TOUS les modules du catalogue
             enabledModules = featureModuleRepository.findAll().stream()
                     .map(FeatureModule::getCode)
                     .toList();
@@ -72,10 +123,16 @@ public class AuthService {
                 .distinct()
                 .toList();
 
-        Authentication auth = new UsernamePasswordAuthenticationToken(user.getUsername(), null,
-                Collections.emptyList());
-        String token = jwtUtils.generateJwtToken(auth, tenant != null ? tenant.getId() : null,
-                tenant != null ? tenant.getCode() : "SUPERADMIN", enabledModules);
+        Authentication auth = new UsernamePasswordAuthenticationToken(
+                user.getUsername(), null, Collections.emptyList());
+        String token = jwtUtils.generateJwtToken(
+                auth,
+                tenant != null ? tenant.getId() : null,
+                tenant != null ? tenant.getCode() : "SUPERADMIN",
+                enabledModules,
+                roles,
+                permissions,
+                Boolean.TRUE.equals(user.getIsSuperAdmin()));
 
         return JwtResponse.builder()
                 .token(token)
@@ -132,7 +189,7 @@ public class AuthService {
 
         final Tenant savedTenant = tenantRepository.save(tenant);
 
-        // Création du rôle Admin Établissement
+        // Création du rôle Admin Établissement (récupère le rôle système existant si présent)
         Role adminRole = roleRepository.findByCode("SCHOOL_ADMIN")
                 .orElseGet(() -> roleRepository.save(Role.builder()
                         .tenant(savedTenant)
