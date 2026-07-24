@@ -103,4 +103,11 @@ public final class SecurityUtils {
     public static boolean isSuperAdmin() {
         return Boolean.TRUE.equals(getCurrentPrincipal().getIsSuperAdmin());
     }
+
+    /**
+     * Récupère le code de l'abonnement SaaS (planCode) de l'utilisateur connecté.
+     */
+    public static String getCurrentPlanCode() {
+        return getCurrentPrincipal().getPlanCode();
+    }
 }

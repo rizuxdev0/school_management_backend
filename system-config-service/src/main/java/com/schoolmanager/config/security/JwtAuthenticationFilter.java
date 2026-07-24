@@ -25,6 +25,19 @@ import java.util.List;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtils jwtUtils;
+    private final org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
+
+    // Cache thread-safe pour le statut des tenants (limite l'accès réseau à 1 requête / minute par tenant)
+    private static final java.util.Map<java.util.UUID, TenantCacheEntry> tenantCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long CACHE_DURATION_MS = 60000; // 60 secondes
+
+    @lombok.Getter
+    @RequiredArgsConstructor
+    private static class TenantCacheEntry {
+        private final boolean active;
+        private final String planCode;
+        private final long cachedAt;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -42,6 +55,51 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 List<String> permissions = (List<String>) claims.get("permissions");
                 
                 Boolean isSuperAdmin = claims.get("isSuperAdmin", Boolean.class);
+                String planCode = claims.get("planCode", String.class);
+                String rawTenantId = claims.get("tenantId", String.class);
+
+                // --- VÉRIFICATION DYNAMIQUE DU STATUT DU TENANT (SAAS SECURITY CONTROL) ---
+                if (!Boolean.TRUE.equals(isSuperAdmin) && rawTenantId != null && !rawTenantId.isBlank()) {
+                    java.util.UUID tenantId = java.util.UUID.fromString(rawTenantId);
+                    
+                    // Lecture / Mise à jour du cache
+                    long now = System.currentTimeMillis();
+                    TenantCacheEntry cached = tenantCache.get(tenantId);
+                    
+                    if (cached == null || (now - cached.getCachedAt() > CACHE_DURATION_MS)) {
+                        try {
+                            String url = "http://localhost:8081/api/v1/auth/tenants/" + tenantId + "/status";
+                            @SuppressWarnings("unchecked")
+                            java.util.Map<String, Object> status = restTemplate.getForObject(url, java.util.Map.class);
+                            if (status == null) {
+                                rejectRequest(response, "TENANT_NOT_FOUND");
+                                return;
+                            }
+                            boolean active = Boolean.TRUE.equals(status.get("isActive"));
+                            String plan = (String) status.get("planCode");
+                            cached = new TenantCacheEntry(active, plan, now);
+                            tenantCache.put(tenantId, cached);
+                        } catch (Exception e) {
+                            log.error("Erreur de communication inter-services vers auth-service pour le statut du tenant: {}", e.getMessage());
+                            if (cached == null) {
+                                rejectRequest(response, "SECURITY_SERVICE_UNAVAILABLE");
+                                return;
+                            }
+                        }
+                    }
+
+                    // 1. Validation de l'activation du compte
+                    if (!cached.isActive()) {
+                        rejectRequest(response, "TENANT_SUSPENDED");
+                        return;
+                    }
+
+                    // 2. Validation de l'intégrité du plan d'abonnement
+                    if (planCode != null && !planCode.equalsIgnoreCase(cached.getPlanCode())) {
+                        rejectRequest(response, "PLAN_CHANGED");
+                        return;
+                    }
+                }
 
                 List<SimpleGrantedAuthority> authorities = new ArrayList<>();
                 if (Boolean.TRUE.equals(isSuperAdmin)) {
@@ -72,7 +130,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     permissions.forEach(perm -> authorities.add(new SimpleGrantedAuthority(perm)));
                 }
 
-                UserPrincipal principal = new UserPrincipal(username, claims.get("tenantId", String.class), isSuperAdmin);
+                UserPrincipal principal = new UserPrincipal(username, rawTenantId, isSuperAdmin, planCode);
 
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         principal, null, authorities);
@@ -85,6 +143,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void rejectRequest(HttpServletResponse response, String reason) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"error\": \"Unauthorized\", \"message\": \"" + reason + "\"}");
     }
 
     private String parseJwt(HttpServletRequest request) {

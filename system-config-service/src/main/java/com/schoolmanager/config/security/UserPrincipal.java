@@ -9,4 +9,5 @@ public class UserPrincipal {
     private final String username;
     private final String tenantId;
     private final Boolean isSuperAdmin;
+    private final String planCode;
 }

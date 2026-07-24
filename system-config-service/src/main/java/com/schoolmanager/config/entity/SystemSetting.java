@@ -132,6 +132,15 @@ public class SystemSetting {
     @Column(name = "enable_email_notifications")
     private Boolean enableEmailNotifications = true;
 
+    // ==================== CONFIGURATIONS RH NOMENCLATURES ====================
+    @Builder.Default
+    @Column(name = "contract_types", length = 1000)
+    private String contractTypes = "Permanent,Vacataire,Contractuel";
+
+    @Builder.Default
+    @Column(name = "degrees", length = 1000)
+    private String degrees = "Licence,Master,Doctorat";
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;

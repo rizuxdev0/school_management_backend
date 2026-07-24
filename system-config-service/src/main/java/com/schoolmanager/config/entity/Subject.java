@@ -41,4 +41,15 @@ public class Subject {
     @Builder.Default
     @Column(name = "is_active")
     private Boolean isActive = true;
+
+    @PrePersist
+    @PreUpdate
+    public void prePersist() {
+        if (this.coefficient == null) {
+            this.coefficient = new java.math.BigDecimal("1.00");
+        }
+        if (this.isActive == null) {
+            this.isActive = true;
+        }
+    }
 }

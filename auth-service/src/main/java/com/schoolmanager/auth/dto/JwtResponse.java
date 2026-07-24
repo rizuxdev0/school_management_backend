@@ -23,6 +23,8 @@ public class JwtResponse {
     private String lastName;
     private UUID tenantId;
     private String tenantCode;
+    /** Nom complet de l'établissement (ex: "INSTITUT POLYTECHNIQUE DEFITECH") */
+    private String tenantName;
     private Boolean isSuperAdmin;
     private List<String> roles;
     private List<String> permissions;

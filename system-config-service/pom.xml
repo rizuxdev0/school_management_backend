@@ -118,6 +118,25 @@
             <artifactId>itext</artifactId>
             <version>2.1.7</version>
         </dependency>
+
+        <!-- ==================== TwelveMonkeys ImageIO ==================== -->
+        <!-- Ajoute le support natif des formats WebP, JPEG2000, TIFF, etc.  -->
+        <!-- dans Java ImageIO, évitant les erreurs JasperReports/Batik SVG   -->
+        <dependency>
+            <groupId>com.twelvemonkeys.imageio</groupId>
+            <artifactId>imageio-core</artifactId>
+            <version>3.10.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.twelvemonkeys.imageio</groupId>
+            <artifactId>imageio-webp</artifactId>
+            <version>3.10.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.twelvemonkeys.imageio</groupId>
+            <artifactId>imageio-jpeg</artifactId>
+            <version>3.10.1</version>
+        </dependency>
     </dependencies>
 
     <build>

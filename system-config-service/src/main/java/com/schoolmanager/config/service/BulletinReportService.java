@@ -30,6 +30,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
 
 /**
  * Service de génération des bulletins scolaires en PDF avec JasperReports.
@@ -386,8 +387,9 @@ public class BulletinReportService {
         params.put("watermarkText", watermark);
 
         // Logo (Base64 string pour les nouveaux templates, InputStream pour l'ancien)
-        params.put("logoBase64",    nullSafe(setting.getLogoBase64()));
-        params.put("LOGO_IMAGE",    resolveLogo(setting));
+        String normalizedLogo = normalizeLogoToPngBase64(setting.getLogoBase64());
+        params.put("logoBase64",    normalizedLogo);
+        params.put("LOGO_IMAGE",    resolveLogo(normalizedLogo, setting.getLogoUrl(), setting.getTenantId()));
 
         // === Contexte académique ===
         params.put("className",         nullSafe(classroom.getName()));
@@ -423,24 +425,24 @@ public class BulletinReportService {
      * Résout l'image du logo à partir du Base64 stocké ou de l'URL.
      * Retourne un InputStream pour JasperReports, ou null si aucun logo n'est disponible.
      */
-    private InputStream resolveLogo(SystemSetting setting) {
-        if (setting.getLogoBase64() != null && !setting.getLogoBase64().isBlank()) {
+    private InputStream resolveLogo(String normalizedLogoBase64, String logoUrl, UUID tenantId) {
+        if (normalizedLogoBase64 != null && !normalizedLogoBase64.isBlank()) {
             try {
-                String base64Data = setting.getLogoBase64();
+                String base64Data = normalizedLogoBase64;
                 if (base64Data.contains(",")) {
                     base64Data = base64Data.substring(base64Data.indexOf(',') + 1);
                 }
                 byte[] logoBytes = Base64.getDecoder().decode(base64Data);
                 return new ByteArrayInputStream(logoBytes);
             } catch (Exception e) {
-                log.warn("Impossible de décoder le logo Base64 pour le tenant {} : {}", setting.getTenantId(), e.getMessage());
+                log.warn("Impossible de décoder le logo Base64 normalisé pour le tenant {} : {}", tenantId, e.getMessage());
             }
         }
-        if (setting.getLogoUrl() != null && !setting.getLogoUrl().isBlank()) {
+        if (logoUrl != null && !logoUrl.isBlank()) {
             try {
-                return new java.net.URL(setting.getLogoUrl()).openStream();
+                return new java.net.URL(logoUrl).openStream();
             } catch (Exception e) {
-                log.warn("Impossible de charger le logo depuis l'URL {} : {}", setting.getLogoUrl(), e.getMessage());
+                log.warn("Impossible de charger le logo depuis l'URL {} : {}", logoUrl, e.getMessage());
             }
         }
         return null;
@@ -493,6 +495,45 @@ public class BulletinReportService {
             } catch (Exception ex) {
                 return null;
             }
+        }
+    }
+
+    /**
+     * Normalise n'importe quelle image encodée en Base64 (y compris WebP) en format PNG standard
+     * pour assurer un décodage fluide et sans erreur dans JasperReports (Batik SVG crash fix).
+     */
+    private String normalizeLogoToPngBase64(String base64Input) {
+        if (base64Input == null || base64Input.trim().isEmpty()) {
+            return "";
+        }
+        try {
+            String cleanBase64 = base64Input;
+            if (cleanBase64.contains(",")) {
+                cleanBase64 = cleanBase64.split(",")[1];
+            }
+            byte[] decodedBytes = Base64.getDecoder().decode(cleanBase64.trim());
+            
+            // Tenter de lire l'image avec TwelveMonkeys ImageIO (supportant WebP)
+            ByteArrayInputStream bais = new ByteArrayInputStream(decodedBytes);
+            BufferedImage image = ImageIO.read(bais);
+            if (image == null) {
+                log.warn("L'image fournie n'a pas pu être décodée par ImageIO.");
+                return base64Input; // Retourner la chaîne d'origine en fallback
+            }
+
+            // Ré-encoder en PNG standard
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            boolean success = ImageIO.write(image, "png", baos);
+            if (!success) {
+                log.warn("Impossible de ré-encoder l'image décodée au format PNG.");
+                return base64Input;
+            }
+
+            byte[] pngBytes = baos.toByteArray();
+            return "data:image/png;base64," + Base64.getEncoder().encodeToString(pngBytes);
+        } catch (Exception e) {
+            log.warn("Erreur lors de la normalisation du logo Base64 en PNG : {}", e.getMessage());
+            return base64Input; // Fallback
         }
     }
 }

@@ -30,6 +30,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtils jwtUtils;
     private final UserRepository userRepository;
+    private final com.schoolmanager.auth.repository.TenantRepository tenantRepository;
+
+    // Cache thread-safe pour le statut des tenants (limite l'accès base à 1 requête / minute par tenant)
+    private static final java.util.Map<java.util.UUID, TenantCacheEntry> tenantCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long CACHE_DURATION_MS = 60000; // 60 secondes
+
+    @lombok.Getter
+    @RequiredArgsConstructor
+    private static class TenantCacheEntry {
+        private final boolean active;
+        private final String planCode;
+        private final long cachedAt;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -37,7 +50,43 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             String jwt = parseJwt(request);
             if (jwt != null && jwtUtils.validateJwtToken(jwt)) {
-                String username = jwtUtils.getUserNameFromJwtToken(jwt);
+                io.jsonwebtoken.Claims claims = jwtUtils.getClaimsFromJwtToken(jwt);
+                String username = claims.getSubject();
+
+                Boolean isSuperAdmin = claims.get("isSuperAdmin", Boolean.class);
+                String planCode = claims.get("planCode", String.class);
+                String rawTenantId = claims.get("tenantId", String.class);
+
+                // --- VÉRIFICATION DYNAMIQUE DU STATUT DU TENANT (SAAS SECURITY CONTROL) ---
+                if (!Boolean.TRUE.equals(isSuperAdmin) && rawTenantId != null && !rawTenantId.isBlank()) {
+                    java.util.UUID tenantId = java.util.UUID.fromString(rawTenantId);
+                    
+                    // Lecture / Mise à jour du cache
+                    long now = System.currentTimeMillis();
+                    TenantCacheEntry cached = tenantCache.get(tenantId);
+                    
+                    if (cached == null || (now - cached.getCachedAt() > CACHE_DURATION_MS)) {
+                        com.schoolmanager.auth.entity.Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
+                        if (tenant == null) {
+                            rejectRequest(response, "TENANT_NOT_FOUND");
+                            return;
+                        }
+                        cached = new TenantCacheEntry(tenant.getIsActive(), tenant.getPlanCode(), now);
+                        tenantCache.put(tenantId, cached);
+                    }
+
+                    // 1. Validation de l'activation du compte
+                    if (!cached.isActive()) {
+                        rejectRequest(response, "TENANT_SUSPENDED");
+                        return;
+                    }
+
+                    // 2. Validation de l'intégrité du plan d'abonnement
+                    if (planCode != null && !planCode.equalsIgnoreCase(cached.getPlanCode())) {
+                        rejectRequest(response, "PLAN_CHANGED");
+                        return;
+                    }
+                }
 
                 User user = userRepository.findByUsername(username).orElse(null);
                 if (user != null && Boolean.TRUE.equals(user.getIsActive()) && Boolean.TRUE.equals(user.getIsAccountNonLocked())) {
@@ -86,6 +135,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void rejectRequest(HttpServletResponse response, String reason) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"error\": \"Unauthorized\", \"message\": \"" + reason + "\"}");
     }
 
     private String parseJwt(HttpServletRequest request) {

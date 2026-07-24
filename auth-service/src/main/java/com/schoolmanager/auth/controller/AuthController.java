@@ -73,4 +73,11 @@ public class AuthController {
 
         return ResponseEntity.ok(subscriptionInvoiceRepository.findByTenantIdOrderByInvoiceDateDesc(tenantId));
     }
+
+    @GetMapping("/tenants/{tenantId}/status")
+    public ResponseEntity<java.util.Map<String, Object>> getTenantStatus(@PathVariable java.util.UUID tenantId) {
+        return authService.getTenantStatus(tenantId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
 }

@@ -81,4 +81,17 @@ public class User {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt;
+
+    // --- PROPRIÉTÉS COMPLÉMENTAIRES ENSEIGNANTS / PROFESSEURS ---
+    @Column(name = "specialty", length = 150)
+    private String specialty; // ex: Mathématiques, Histoire
+
+    @Column(name = "contract_type", length = 50)
+    private String contractType; // ex: VACATAIRE, PERMANENT
+
+    @Column(name = "weekly_hours")
+    private Integer weeklyHours; // Volume horaire hebdomadaire contractuel
+
+    @Column(name = "degree", length = 100)
+    private String degree; // ex: Master, Doctorat, Licence
 }

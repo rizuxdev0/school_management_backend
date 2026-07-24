@@ -129,6 +129,7 @@ public class AuthService {
                 auth,
                 tenant != null ? tenant.getId() : null,
                 tenant != null ? tenant.getCode() : "SUPERADMIN",
+                tenant != null ? tenant.getPlanCode() : "SYSTEM",
                 enabledModules,
                 roles,
                 permissions,
@@ -143,6 +144,7 @@ public class AuthService {
                 .lastName(user.getLastName())
                 .tenantId(tenant != null ? tenant.getId() : null)
                 .tenantCode(tenant != null ? tenant.getCode() : "SUPERADMIN")
+                .tenantName(tenant != null ? tenant.getName() : null)
                 .isSuperAdmin(user.getIsSuperAdmin())
                 .roles(roles)
                 .permissions(permissions)
@@ -161,6 +163,10 @@ public class AuthService {
     public Tenant registerTenant(TenantRegistrationDto dto) {
         if (tenantRepository.existsByCode(dto.getTenantCode())) {
             throw new RuntimeException("Ce code d'établissement existe déjà");
+        }
+
+        if (!com.schoolmanager.auth.security.PasswordValidator.isValid(dto.getAdminPassword())) {
+            throw new RuntimeException("Le mot de passe administrateur ne respecte pas les critères de complexité (min 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial).");
         }
 
         SubscriptionPlan plan = subscriptionPlanRepository.findByCode(dto.getPlanCode())
@@ -223,5 +229,14 @@ public class AuthService {
         tenant.setLogoUrl(logoUrl);
         tenant.setPrimaryColor(primaryColor);
         return tenantRepository.save(tenant);
+    }
+
+    public Optional<Map<String, Object>> getTenantStatus(UUID tenantId) {
+        return tenantRepository.findById(tenantId).map(tenant -> {
+            Map<String, Object> status = new HashMap<>();
+            status.put("isActive", tenant.getIsActive());
+            status.put("planCode", tenant.getPlanCode());
+            return status;
+        });
     }
 }

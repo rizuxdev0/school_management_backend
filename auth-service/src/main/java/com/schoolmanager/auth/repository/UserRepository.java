@@ -19,6 +19,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     List<User> findByTenantId(UUID tenantId);
 
+    long countByTenantId(UUID tenantId);
+
     List<User> findByTenantIdAndRolesCode(UUID tenantId, String roleCode);
 
     boolean existsByUsername(String username);

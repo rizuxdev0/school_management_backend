@@ -102,10 +102,19 @@ public class UserManagementController {
             existing.setEmail(userRequest.getEmail());
             existing.setPhoneNumber(userRequest.getPhoneNumber());
             existing.setIsActive(userRequest.getIsActive());
+            
+            // Recopie des attributs de profil enseignants
+            existing.setSpecialty(userRequest.getSpecialty());
+            existing.setContractType(userRequest.getContractType());
+            existing.setWeeklyHours(userRequest.getWeeklyHours());
+            existing.setDegree(userRequest.getDegree());
 
             // Si un nouveau mot de passe a été envoyé (non hashé)
             if (userRequest.getPasswordHash() != null && !userRequest.getPasswordHash().trim().isEmpty() 
                 && !userRequest.getPasswordHash().startsWith("$2a$")) {
+                if (!com.schoolmanager.auth.security.PasswordValidator.isValid(userRequest.getPasswordHash())) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Le mot de passe ne respecte pas les critères de complexité (min 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial).");
+                }
                 existing.setPasswordHash(passwordEncoder.encode(userRequest.getPasswordHash()));
             }
 
@@ -128,7 +137,30 @@ public class UserManagementController {
         }
 
         // Création d'un nouvel utilisateur
+        UUID targetTenantId = Boolean.TRUE.equals(currentUser.getIsSuperAdmin())
+                ? (userRequest.getTenant() != null ? userRequest.getTenant().getId() : null)
+                : (currentUser.getTenant() != null ? currentUser.getTenant().getId() : null);
+
+        if (targetTenantId != null) {
+            Tenant tenant = tenantRepository.findById(targetTenantId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Établissement introuvable"));
+
+            Integer maxStaff = tenant.getMaxStaff();
+            if (maxStaff != null) {
+                long currentStaffCount = userRepository.countByTenantId(targetTenantId);
+                if (currentStaffCount >= maxStaff) {
+                    throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Limite de quota de personnel atteinte (" + maxStaff + " max). Veuillez mettre à niveau votre forfait SaaS."
+                    );
+                }
+            }
+        }
+
         if (userRequest.getPasswordHash() != null) {
+            if (!com.schoolmanager.auth.security.PasswordValidator.isValid(userRequest.getPasswordHash())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Le mot de passe ne respecte pas les critères de complexité (min 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial).");
+            }
             userRequest.setPasswordHash(passwordEncoder.encode(userRequest.getPasswordHash()));
         }
 

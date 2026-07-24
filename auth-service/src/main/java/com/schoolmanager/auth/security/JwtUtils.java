@@ -24,7 +24,7 @@ public class JwtUtils {
     @Value("${app.jwt.expiration-ms}")
     private int jwtExpirationMs;
 
-    public String generateJwtToken(Authentication authentication, UUID tenantId, String tenantCode, List<String> enabledModules, List<String> roles, List<String> permissions, boolean isSuperAdmin) {
+    public String generateJwtToken(Authentication authentication, UUID tenantId, String tenantCode, String planCode, List<String> enabledModules, List<String> roles, List<String> permissions, boolean isSuperAdmin) {
         String username = authentication.getName();
 
         return Jwts.builder()
@@ -32,6 +32,7 @@ public class JwtUtils {
                 .claims(Map.of(
                         "tenantId", tenantId != null ? tenantId.toString() : "",
                         "tenantCode", tenantCode != null ? tenantCode : "",
+                        "planCode", planCode != null ? planCode : "SYSTEM",
                         "enabledModules", enabledModules,
                         "roles", roles,
                         "permissions", permissions,
@@ -54,6 +55,14 @@ public class JwtUtils {
                 .parseSignedClaims(token)
                 .getPayload()
                 .getSubject();
+    }
+
+    public Claims getClaimsFromJwtToken(String token) {
+        return Jwts.parser()
+                .verifyWith(key())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
     public boolean validateJwtToken(String authToken) {
