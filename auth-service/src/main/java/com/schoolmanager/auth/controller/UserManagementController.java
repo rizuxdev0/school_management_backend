@@ -8,6 +8,7 @@ import com.schoolmanager.auth.repository.PermissionRepository;
 import com.schoolmanager.auth.repository.RoleRepository;
 import com.schoolmanager.auth.repository.TenantRepository;
 import com.schoolmanager.auth.repository.UserRepository;
+import com.schoolmanager.auth.security.PasswordValidator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -36,6 +37,7 @@ public class UserManagementController {
     private final PermissionRepository permissionRepository;
     private final TenantRepository tenantRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordValidator passwordValidator;
 
     // Helper pour récupérer l'utilisateur connecté
     private User getCurrentUser() {
@@ -112,8 +114,9 @@ public class UserManagementController {
             // Si un nouveau mot de passe a été envoyé (non hashé)
             if (userRequest.getPasswordHash() != null && !userRequest.getPasswordHash().trim().isEmpty() 
                 && !userRequest.getPasswordHash().startsWith("$2a$")) {
-                if (!com.schoolmanager.auth.security.PasswordValidator.isValid(userRequest.getPasswordHash())) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Le mot de passe ne respecte pas les critères de complexité (min 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial).");
+                UUID tenantId = existing.getTenant() != null ? existing.getTenant().getId() : null;
+                if (!passwordValidator.isValid(userRequest.getPasswordHash(), tenantId)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Le mot de passe ne respecte pas les critères de complexité exigés par l'établissement.");
                 }
                 existing.setPasswordHash(passwordEncoder.encode(userRequest.getPasswordHash()));
             }
@@ -158,8 +161,8 @@ public class UserManagementController {
         }
 
         if (userRequest.getPasswordHash() != null) {
-            if (!com.schoolmanager.auth.security.PasswordValidator.isValid(userRequest.getPasswordHash())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Le mot de passe ne respecte pas les critères de complexité (min 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial).");
+            if (!passwordValidator.isValid(userRequest.getPasswordHash(), targetTenantId)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Le mot de passe ne respecte pas les critères de complexité exigés par l'établissement.");
             }
             userRequest.setPasswordHash(passwordEncoder.encode(userRequest.getPasswordHash()));
         }

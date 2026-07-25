@@ -141,6 +141,27 @@ public class SystemSetting {
     @Column(name = "degrees", length = 1000)
     private String degrees = "Licence,Master,Doctorat";
 
+    // ==================== PARAMÈTRES DE SÉCURITÉ MOTS DE PASSE ====================
+    @Builder.Default
+    @Column(name = "password_min_length")
+    private Integer passwordMinLength = 8;
+
+    @Builder.Default
+    @Column(name = "password_require_uppercase")
+    private Boolean passwordRequireUppercase = true;
+
+    @Builder.Default
+    @Column(name = "password_require_lowercase")
+    private Boolean passwordRequireLowercase = true;
+
+    @Builder.Default
+    @Column(name = "password_require_number")
+    private Boolean passwordRequireNumber = true;
+
+    @Builder.Default
+    @Column(name = "password_require_special")
+    private Boolean passwordRequireSpecial = true;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;

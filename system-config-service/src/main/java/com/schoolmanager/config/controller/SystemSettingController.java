@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -32,6 +33,29 @@ public class SystemSettingController {
         return systemSettingRepository.findByTenantId(jwtTenantId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/tenant/{tenantId}/password-policy")
+    public ResponseEntity<Map<String, Object>> getPasswordPolicy(@PathVariable UUID tenantId) {
+        return systemSettingRepository.findByTenantId(tenantId)
+                .map(setting -> {
+                    Map<String, Object> policy = new HashMap<>();
+                    policy.put("passwordMinLength", setting.getPasswordMinLength());
+                    policy.put("passwordRequireUppercase", setting.getPasswordRequireUppercase());
+                    policy.put("passwordRequireLowercase", setting.getPasswordRequireLowercase());
+                    policy.put("passwordRequireNumber", setting.getPasswordRequireNumber());
+                    policy.put("passwordRequireSpecial", setting.getPasswordRequireSpecial());
+                    return ResponseEntity.ok(policy);
+                })
+                .orElseGet(() -> {
+                    Map<String, Object> fallback = new HashMap<>();
+                    fallback.put("passwordMinLength", 8);
+                    fallback.put("passwordRequireUppercase", true);
+                    fallback.put("passwordRequireLowercase", true);
+                    fallback.put("passwordRequireNumber", true);
+                    fallback.put("passwordRequireSpecial", true);
+                    return ResponseEntity.ok(fallback);
+                });
     }
 
     @GetMapping("/tenant/{tenantId}/is-initialized")

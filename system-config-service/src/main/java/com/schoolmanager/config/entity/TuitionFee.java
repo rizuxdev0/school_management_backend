@@ -31,6 +31,14 @@ public class TuitionFee {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal amount; // Montant exigé (ex: 250000.00)
 
+    @Column(name = "installments_count", nullable = false)
+    @Builder.Default
+    private Integer installmentsCount = 1;
+
+    @Column(name = "payment_frequency", nullable = false, length = 50)
+    @Builder.Default
+    private String paymentFrequency = "UNIQUE"; // UNIQUE, MONTHLY, TRIMESTRIEL
+
     @Column(name = "academic_year_id", nullable = false)
     private UUID academicYearId;
 

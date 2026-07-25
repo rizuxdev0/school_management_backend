@@ -173,6 +173,82 @@ public class AttendanceAndFinanceController {
 
         BigDecimal balance = totalExigible.subtract(totalPaid);
 
+        // --- GÉNÉRATION DYNAMIQUE DU TABLEAU D'AMORTISSEMENT ---
+        List<AmortizationInstallmentDto> amortizationTable = new ArrayList<>();
+
+        for (TuitionFee fee : fees) {
+            int count = fee.getInstallmentsCount() != null ? fee.getInstallmentsCount() : 1;
+            String freq = fee.getPaymentFrequency() != null ? fee.getPaymentFrequency() : "UNIQUE";
+            BigDecimal totalAmount = fee.getAmount();
+
+            if (count <= 1) {
+                // Tranche unique
+                amortizationTable.add(AmortizationInstallmentDto.builder()
+                        .feeName(fee.getName())
+                        .installmentNumber(1)
+                        .totalInstallments(1)
+                        .amountDue(totalAmount)
+                        .amountPaid(BigDecimal.ZERO)
+                        .amountRemaining(totalAmount)
+                        .dueDate(LocalDate.now().withMonth(9).withDayOfMonth(15)) // Rentrée scolaire
+                        .status("PENDING")
+                        .build());
+            } else {
+                BigDecimal installmentAmount = totalAmount.divide(BigDecimal.valueOf(count), 2, java.math.RoundingMode.HALF_UP);
+                BigDecimal remainder = totalAmount.subtract(installmentAmount.multiply(BigDecimal.valueOf(count - 1)));
+
+                LocalDate baseDate = LocalDate.now().withMonth(9).withDayOfMonth(15);
+
+                for (int i = 1; i <= count; i++) {
+                    BigDecimal due = (i == count) ? remainder : installmentAmount;
+                    LocalDate dueDate;
+                    if ("MONTHLY".equalsIgnoreCase(freq)) {
+                        dueDate = baseDate.plusMonths(i - 1);
+                    } else if ("TRIMESTRIEL".equalsIgnoreCase(freq)) {
+                        dueDate = baseDate.plusMonths((i - 1) * 3);
+                    } else {
+                        dueDate = baseDate;
+                    }
+
+                    amortizationTable.add(AmortizationInstallmentDto.builder()
+                            .feeName(fee.getName())
+                            .installmentNumber(i)
+                            .totalInstallments(count)
+                            .amountDue(due)
+                            .amountPaid(BigDecimal.ZERO)
+                            .amountRemaining(due)
+                            .dueDate(dueDate)
+                            .status("PENDING")
+                            .build());
+                }
+            }
+        }
+
+        // Tri chronologique FIFO des tranches théoriques
+        amortizationTable.sort(java.util.Comparator.comparing(AmortizationInstallmentDto::getDueDate));
+
+        // Répartition FIFO du total payé
+        BigDecimal remainingPaid = totalPaid;
+        for (AmortizationInstallmentDto inst : amortizationTable) {
+            if (remainingPaid.compareTo(BigDecimal.ZERO) <= 0) {
+                inst.setStatus("PENDING");
+                continue;
+            }
+
+            BigDecimal due = inst.getAmountDue();
+            if (remainingPaid.compareTo(due) >= 0) {
+                inst.setAmountPaid(due);
+                inst.setAmountRemaining(BigDecimal.ZERO);
+                inst.setStatus("PAID");
+                remainingPaid = remainingPaid.subtract(due);
+            } else {
+                inst.setAmountPaid(remainingPaid);
+                inst.setAmountRemaining(due.subtract(remainingPaid));
+                inst.setStatus("PARTIAL");
+                remainingPaid = BigDecimal.ZERO;
+            }
+        }
+
         return ResponseEntity.ok(StudentLedgerDto.builder()
                 .studentId(studentId)
                 .studentName(student.getLastName() + " " + student.getFirstName())
@@ -182,6 +258,7 @@ public class AttendanceAndFinanceController {
                 .balance(balance)
                 .payments(payments)
                 .feesStructure(fees)
+                .amortizationTable(amortizationTable)
                 .build());
     }
 
@@ -196,5 +273,19 @@ public class AttendanceAndFinanceController {
         private BigDecimal balance;
         private List<StudentPayment> payments;
         private List<TuitionFee> feesStructure;
+        private List<AmortizationInstallmentDto> amortizationTable;
+    }
+
+    @Data
+    @Builder
+    public static class AmortizationInstallmentDto {
+        private String feeName;
+        private int installmentNumber;
+        private int totalInstallments;
+        private BigDecimal amountDue;
+        private BigDecimal amountPaid;
+        private BigDecimal amountRemaining;
+        private LocalDate dueDate;
+        private String status; // PAID, PARTIAL, PENDING
     }
 }

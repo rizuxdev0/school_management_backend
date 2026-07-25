@@ -6,6 +6,7 @@ import com.schoolmanager.auth.dto.TenantRegistrationDto;
 import com.schoolmanager.auth.entity.*;
 import com.schoolmanager.auth.repository.*;
 import com.schoolmanager.auth.security.JwtUtils;
+import com.schoolmanager.auth.security.PasswordValidator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -26,6 +27,7 @@ public class AuthService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
+    private final PasswordValidator passwordValidator;
 
     /**
      * Authentifie l'utilisateur et retourne un JWT complet avec tous ses droits.
@@ -165,8 +167,8 @@ public class AuthService {
             throw new RuntimeException("Ce code d'établissement existe déjà");
         }
 
-        if (!com.schoolmanager.auth.security.PasswordValidator.isValid(dto.getAdminPassword())) {
-            throw new RuntimeException("Le mot de passe administrateur ne respecte pas les critères de complexité (min 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial).");
+        if (!passwordValidator.isValid(dto.getAdminPassword(), null)) {
+            throw new RuntimeException("Le mot de passe administrateur ne respecte pas les critères de complexité exigés.");
         }
 
         SubscriptionPlan plan = subscriptionPlanRepository.findByCode(dto.getPlanCode())
