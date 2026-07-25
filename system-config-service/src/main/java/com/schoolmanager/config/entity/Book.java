@@ -45,4 +45,8 @@ public class Book {
 
     @Column(length = 50)
     private String category; // Roman, Dictionnaire, Scientifique, etc.
+
+    @Column(name = "is_active", nullable = false)
+    @Builder.Default
+    private Boolean isActive = true;
 }

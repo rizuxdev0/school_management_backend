@@ -10,4 +10,6 @@ import java.util.UUID;
 public interface BookLoanRepository extends JpaRepository<BookLoan, UUID> {
     List<BookLoan> findByTenantId(UUID tenantId);
     List<BookLoan> findByStudentId(UUID studentId);
+    List<BookLoan> findByBookId(UUID bookId);
+    void deleteByBookId(UUID bookId);
 }

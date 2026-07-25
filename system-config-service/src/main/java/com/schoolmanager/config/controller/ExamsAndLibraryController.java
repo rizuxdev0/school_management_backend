@@ -123,6 +123,12 @@ public class ExamsAndLibraryController {
         Book book = bookRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Livre introuvable"));
         SecurityUtils.assertOwnership(book.getTenantId());
+        
+        List<BookLoan> loans = bookLoanRepository.findByBookId(id);
+        if (!loans.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Impossible de supprimer ce livre car il possède un historique de prêts. Veuillez l'Archiver à la place.");
+        }
+        
         bookRepository.deleteById(id);
         return ResponseEntity.noContent().build();
     }

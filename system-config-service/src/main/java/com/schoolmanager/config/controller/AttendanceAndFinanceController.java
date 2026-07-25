@@ -39,6 +39,7 @@ public class AttendanceAndFinanceController {
     private final TuitionFeeRepository tuitionFeeRepository;
     private final StudentPaymentRepository studentPaymentRepository;
     private final StudentRepository studentRepository;
+    private final com.schoolmanager.config.service.ReceiptReportService receiptReportService;
 
     // ==================== 1. ABSENCES & ASSIDUITÉ ====================
 
@@ -140,6 +141,15 @@ public class AttendanceAndFinanceController {
         SecurityUtils.assertOwnership(payment.getTenantId());
         studentPaymentRepository.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping(value = "/payments/{id}/receipt", produces = org.springframework.http.MediaType.APPLICATION_PDF_VALUE)
+    @PreAuthorize("hasAuthority('FINANCE_VIEW')")
+    public ResponseEntity<byte[]> generateReceipt(@PathVariable UUID id) {
+        byte[] pdfBytes = receiptReportService.generatePaymentReceipt(id);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "inline; filename=\"recu_" + id + ".pdf\"")
+                .body(pdfBytes);
     }
 
     // ==================== 4. LE RELEVÉ FINANCIER DE L'ÉLÈVE / LEDGER ====================
