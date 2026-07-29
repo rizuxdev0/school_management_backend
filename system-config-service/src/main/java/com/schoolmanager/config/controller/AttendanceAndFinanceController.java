@@ -3,10 +3,12 @@ package com.schoolmanager.config.controller;
 import com.schoolmanager.config.entity.Attendance;
 import com.schoolmanager.config.entity.Student;
 import com.schoolmanager.config.entity.StudentPayment;
+import com.schoolmanager.config.entity.StudentScholarship;
 import com.schoolmanager.config.entity.TuitionFee;
 import com.schoolmanager.config.repository.AttendanceRepository;
 import com.schoolmanager.config.repository.StudentPaymentRepository;
 import com.schoolmanager.config.repository.StudentRepository;
+import com.schoolmanager.config.repository.StudentScholarshipRepository;
 import com.schoolmanager.config.repository.TuitionFeeRepository;
 import com.schoolmanager.config.security.SecurityUtils;
 import lombok.Builder;
@@ -19,15 +21,24 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.schoolmanager.config.entity.Classroom;
+import com.schoolmanager.config.entity.StudentEnrollment;
+import com.schoolmanager.config.repository.StudentEnrollmentRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
- * Contrôleur REST pour les absences et la finance (frais, paiements, relevé).
+ * Contrôleur REST pour les absences et la finance (frais, paiements, relevé, dashboard).
  * Supporte le bypass Super Admin et prévient les attaques IDOR.
  */
 @RestController
@@ -39,7 +50,9 @@ public class AttendanceAndFinanceController {
     private final TuitionFeeRepository tuitionFeeRepository;
     private final StudentPaymentRepository studentPaymentRepository;
     private final StudentRepository studentRepository;
+    private final StudentEnrollmentRepository studentEnrollmentRepository;
     private final com.schoolmanager.config.service.ReceiptReportService receiptReportService;
+    private final StudentScholarshipRepository studentScholarshipRepository;
 
     // ==================== 1. ABSENCES & ASSIDUITÉ ====================
 
@@ -75,6 +88,154 @@ public class AttendanceAndFinanceController {
             }
         }
         return ResponseEntity.ok(saved);
+    }
+
+    // ==================== 1.5. TABLEAU DE BORD FINANCIER & SCOLARITÉ (DASHBOARD) ====================
+
+    @GetMapping("/dashboard/stats/tenant/{tenantId}/year/{yearId}")
+    @PreAuthorize("hasAuthority('FINANCE_VIEW')")
+    public ResponseEntity<FinanceDashboardStatsDto> getFinanceDashboardStats(
+            @PathVariable UUID tenantId,
+            @PathVariable UUID yearId) {
+
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+
+        // 1. Fetch all enrollments for this tenant and academic year
+        List<StudentEnrollment> enrollments = studentEnrollmentRepository.findByTenantIdAndAcademicYearId(jwtTenantId, yearId);
+
+        // 2. Fetch all tuition fees for this tenant and academic year
+        List<TuitionFee> allFees = tuitionFeeRepository.findByTenantIdAndAcademicYearId(jwtTenantId, yearId);
+
+        // Map academicLevelId -> list of fees
+        Map<UUID, List<TuitionFee>> feesByLevel = allFees.stream()
+                .filter(f -> f.getAcademicLevel() != null)
+                .collect(Collectors.groupingBy(f -> f.getAcademicLevel().getId()));
+
+        // 3. Fetch all payments for this tenant and academic year
+        List<StudentPayment> allPayments = studentPaymentRepository.findByTenantIdAndAcademicYearId(jwtTenantId, yearId);
+
+        BigDecimal totalPaid = allPayments.stream()
+                .map(p -> p.getAmountPaid() != null ? p.getAmountPaid() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Group enrollments by Classroom
+        Map<Classroom, List<StudentEnrollment>> enrollmentsByClass = enrollments.stream()
+                .filter(e -> e.getClassroom() != null)
+                .collect(Collectors.groupingBy(StudentEnrollment::getClassroom));
+
+        BigDecimal totalExigible = BigDecimal.ZERO;
+        List<ClassRecoveryRateDto> classRecoveryRates = new ArrayList<>();
+
+        // Map studentId -> total paid by that student
+        Map<UUID, BigDecimal> paymentsByStudent = allPayments.stream()
+                .filter(p -> p.getStudent() != null)
+                .collect(Collectors.groupingBy(
+                        p -> p.getStudent().getId(),
+                        Collectors.reducing(BigDecimal.ZERO, p -> p.getAmountPaid() != null ? p.getAmountPaid() : BigDecimal.ZERO, BigDecimal::add)
+                ));
+
+        for (Map.Entry<Classroom, List<StudentEnrollment>> entry : enrollmentsByClass.entrySet()) {
+            Classroom classroom = entry.getKey();
+            List<StudentEnrollment> classEnrollments = entry.getValue();
+
+            BigDecimal classExigible = BigDecimal.ZERO;
+            if (classroom.getAcademicLevel() != null) {
+                UUID levelId = classroom.getAcademicLevel().getId();
+                List<TuitionFee> levelFees = feesByLevel.getOrDefault(levelId, Collections.emptyList());
+                BigDecimal levelTotalFee = levelFees.stream()
+                        .map(f -> f.getAmount() != null ? f.getAmount() : BigDecimal.ZERO)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                classExigible = levelTotalFee.multiply(BigDecimal.valueOf(classEnrollments.size()));
+            }
+
+            BigDecimal classPaid = BigDecimal.ZERO;
+            for (StudentEnrollment enrollment : classEnrollments) {
+                if (enrollment.getStudent() != null) {
+                    BigDecimal studentPaid = paymentsByStudent.getOrDefault(enrollment.getStudent().getId(), BigDecimal.ZERO);
+                    classPaid = classPaid.add(studentPaid);
+                }
+            }
+
+            double classRate = classExigible.compareTo(BigDecimal.ZERO) > 0
+                    ? classPaid.divide(classExigible, 4, java.math.RoundingMode.HALF_UP).doubleValue() * 100.0
+                    : 0.0;
+
+            classRecoveryRates.add(ClassRecoveryRateDto.builder()
+                    .classroomId(classroom.getId())
+                    .className(classroom.getName())
+                    .classCode(classroom.getCode())
+                    .totalStudents(classEnrollments.size())
+                    .exigible(classExigible)
+                    .paid(classPaid)
+                    .recoveryRate(Math.round(classRate * 100.0) / 100.0)
+                    .build());
+
+            totalExigible = totalExigible.add(classExigible);
+        }
+
+        classRecoveryRates.sort(Comparator.comparingDouble(ClassRecoveryRateDto::getRecoveryRate));
+
+        BigDecimal totalBalance = totalExigible.subtract(totalPaid);
+        if (totalBalance.compareTo(BigDecimal.ZERO) < 0) {
+            totalBalance = BigDecimal.ZERO;
+        }
+        double overallRate = totalExigible.compareTo(BigDecimal.ZERO) > 0
+                ? totalPaid.divide(totalExigible, 4, java.math.RoundingMode.HALF_UP).doubleValue() * 100.0
+                : 0.0;
+
+        // 4. Monthly collections
+        Map<String, BigDecimal> monthlyMap = new TreeMap<>();
+        for (StudentPayment p : allPayments) {
+            if (p.getPaymentDate() != null) {
+                String monthKey = p.getPaymentDate().getYear() + "-" + String.format("%02d", p.getPaymentDate().getMonthValue());
+                BigDecimal amt = p.getAmountPaid() != null ? p.getAmountPaid() : BigDecimal.ZERO;
+                monthlyMap.put(monthKey, monthlyMap.getOrDefault(monthKey, BigDecimal.ZERO).add(amt));
+            }
+        }
+        List<MonthlyCollectionDto> monthlyCollections = monthlyMap.entrySet().stream()
+                .map(e -> MonthlyCollectionDto.builder()
+                        .month(e.getKey())
+                        .amount(e.getValue())
+                        .build())
+                .collect(Collectors.toList());
+
+        // 5. Payment method breakdown
+        Map<String, BigDecimal> methodMap = new HashMap<>();
+        for (StudentPayment p : allPayments) {
+            String method = p.getPaymentMethod() != null && !p.getPaymentMethod().trim().isEmpty()
+                    ? p.getPaymentMethod().trim().toUpperCase()
+                    : "AUTRE";
+            BigDecimal amt = p.getAmountPaid() != null ? p.getAmountPaid() : BigDecimal.ZERO;
+            methodMap.put(method, methodMap.getOrDefault(method, BigDecimal.ZERO).add(amt));
+        }
+        List<PaymentMethodStatDto> paymentMethodBreakdown = new ArrayList<>();
+        for (Map.Entry<String, BigDecimal> entry : methodMap.entrySet()) {
+            double methodRate = totalPaid.compareTo(BigDecimal.ZERO) > 0
+                    ? entry.getValue().divide(totalPaid, 4, java.math.RoundingMode.HALF_UP).doubleValue() * 100.0
+                    : 0.0;
+            paymentMethodBreakdown.add(PaymentMethodStatDto.builder()
+                    .method(entry.getKey())
+                    .amount(entry.getValue())
+                    .percentage(Math.round(methodRate * 100.0) / 100.0)
+                    .build());
+        }
+
+        // 6. Recent payments
+        List<StudentPayment> recentPayments = allPayments.stream()
+                .sorted(Comparator.comparing(StudentPayment::getPaymentDate, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(10)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(FinanceDashboardStatsDto.builder()
+                .totalExigible(totalExigible)
+                .totalPaid(totalPaid)
+                .totalBalance(totalBalance)
+                .recoveryRate(Math.round(overallRate * 100.0) / 100.0)
+                .monthlyCollections(monthlyCollections)
+                .paymentMethodBreakdown(paymentMethodBreakdown)
+                .classRecoveryRates(classRecoveryRates)
+                .recentPayments(recentPayments)
+                .build());
     }
 
     // ==================== 2. CONFIGURATION DES FRAIS / FEES ====================
@@ -152,6 +313,36 @@ public class AttendanceAndFinanceController {
                 .body(pdfBytes);
     }
 
+    // ==================== 3.5. BOURSES & PRISES EN CHARGE (SCHOLARSHIPS & WAIVERS) ====================
+
+    @GetMapping("/scholarships/tenant/{tenantId}/year/{yearId}")
+    @PreAuthorize("hasAuthority('FINANCE_VIEW')")
+    public ResponseEntity<List<StudentScholarship>> getScholarships(
+            @PathVariable UUID tenantId,
+            @PathVariable UUID yearId) {
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        return ResponseEntity.ok(studentScholarshipRepository.findByTenantIdAndAcademicYearId(jwtTenantId, yearId));
+    }
+
+    @PostMapping("/scholarships")
+    @PreAuthorize("hasAuthority('FINANCE_EDIT')")
+    public ResponseEntity<StudentScholarship> saveScholarship(@RequestBody StudentScholarship scholarship) {
+        if (!SecurityUtils.isSuperAdmin()) {
+            scholarship.setTenantId(SecurityUtils.getCurrentTenantId());
+        }
+        return ResponseEntity.ok(studentScholarshipRepository.save(scholarship));
+    }
+
+    @DeleteMapping("/scholarships/{id}")
+    @PreAuthorize("hasAuthority('FINANCE_EDIT')")
+    public ResponseEntity<Void> deleteScholarship(@PathVariable UUID id) {
+        StudentScholarship scholarship = studentScholarshipRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bourse ou prise en charge introuvable"));
+        SecurityUtils.assertOwnership(scholarship.getTenantId());
+        studentScholarshipRepository.deleteById(id);
+        return ResponseEntity.noContent().build();
+    }
+
     // ==================== 4. LE RELEVÉ FINANCIER DE L'ÉLÈVE / LEDGER ====================
 
     @GetMapping("/ledger/student/{studentId}/year/{yearId}/level/{levelId}")
@@ -170,9 +361,28 @@ public class AttendanceAndFinanceController {
         List<TuitionFee> fees = tuitionFeeRepository
                 .findByAcademicLevelIdAndAcademicYearId(levelId, yearId);
 
-        BigDecimal totalExigible = fees.stream()
+        BigDecimal totalGrossExigible = fees.stream()
                 .map(TuitionFee::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        List<StudentScholarship> scholarships = studentScholarshipRepository
+                .findByStudentIdAndAcademicYearId(studentId, yearId);
+
+        BigDecimal totalScholarshipDiscount = BigDecimal.ZERO;
+        for (StudentScholarship sch : scholarships) {
+            if ("PERCENTAGE".equalsIgnoreCase(sch.getDiscountType())) {
+                BigDecimal disc = totalGrossExigible.multiply(sch.getDiscountValue())
+                        .divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
+                totalScholarshipDiscount = totalScholarshipDiscount.add(disc);
+            } else {
+                totalScholarshipDiscount = totalScholarshipDiscount.add(sch.getDiscountValue());
+            }
+        }
+        if (totalScholarshipDiscount.compareTo(totalGrossExigible) > 0) {
+            totalScholarshipDiscount = totalGrossExigible;
+        }
+
+        BigDecimal totalExigible = totalGrossExigible.subtract(totalScholarshipDiscount);
 
         List<StudentPayment> payments = studentPaymentRepository
                 .findByStudentIdAndAcademicYearId(studentId, yearId);
@@ -190,6 +400,10 @@ public class AttendanceAndFinanceController {
             int count = fee.getInstallmentsCount() != null ? fee.getInstallmentsCount() : 1;
             String freq = fee.getPaymentFrequency() != null ? fee.getPaymentFrequency() : "UNIQUE";
             BigDecimal totalAmount = fee.getAmount();
+            if (totalGrossExigible.compareTo(BigDecimal.ZERO) > 0 && totalScholarshipDiscount.compareTo(BigDecimal.ZERO) > 0) {
+                totalAmount = fee.getAmount().multiply(totalExigible)
+                        .divide(totalGrossExigible, 2, java.math.RoundingMode.HALF_UP);
+            }
 
             if (count <= 1) {
                 // Tranche unique
@@ -263,9 +477,12 @@ public class AttendanceAndFinanceController {
                 .studentId(studentId)
                 .studentName(student.getLastName() + " " + student.getFirstName())
                 .registrationNumber(student.getRegistrationNumber())
+                .totalGrossExigible(totalGrossExigible)
+                .totalScholarshipDiscount(totalScholarshipDiscount)
                 .totalExigible(totalExigible)
                 .totalPaid(totalPaid)
                 .balance(balance)
+                .scholarships(scholarships)
                 .payments(payments)
                 .feesStructure(fees)
                 .amortizationTable(amortizationTable)
@@ -278,9 +495,12 @@ public class AttendanceAndFinanceController {
         private UUID studentId;
         private String studentName;
         private String registrationNumber;
+        private BigDecimal totalGrossExigible;
+        private BigDecimal totalScholarshipDiscount;
         private BigDecimal totalExigible;
         private BigDecimal totalPaid;
         private BigDecimal balance;
+        private List<StudentScholarship> scholarships;
         private List<StudentPayment> payments;
         private List<TuitionFee> feesStructure;
         private List<AmortizationInstallmentDto> amortizationTable;
@@ -297,5 +517,45 @@ public class AttendanceAndFinanceController {
         private BigDecimal amountRemaining;
         private LocalDate dueDate;
         private String status; // PAID, PARTIAL, PENDING
+    }
+
+    @Data
+    @Builder
+    public static class FinanceDashboardStatsDto {
+        private BigDecimal totalExigible;
+        private BigDecimal totalPaid;
+        private BigDecimal totalBalance;
+        private double recoveryRate;
+        private List<MonthlyCollectionDto> monthlyCollections;
+        private List<PaymentMethodStatDto> paymentMethodBreakdown;
+        private List<ClassRecoveryRateDto> classRecoveryRates;
+        private List<StudentPayment> recentPayments;
+    }
+
+    @Data
+    @Builder
+    public static class MonthlyCollectionDto {
+        private String month;
+        private BigDecimal amount;
+    }
+
+    @Data
+    @Builder
+    public static class PaymentMethodStatDto {
+        private String method;
+        private BigDecimal amount;
+        private double percentage;
+    }
+
+    @Data
+    @Builder
+    public static class ClassRecoveryRateDto {
+        private UUID classroomId;
+        private String className;
+        private String classCode;
+        private int totalStudents;
+        private BigDecimal exigible;
+        private BigDecimal paid;
+        private double recoveryRate;
     }
 }

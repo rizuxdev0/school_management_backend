@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+  name="rooms_report"
+  pageWidth="595" pageHeight="842" orientation="Portrait"
+  columnWidth="535" leftMargin="30" rightMargin="30" topMargin="20" bottomMargin="20"
+  whenNoDataType="AllSectionsNoDetail">
+
+  <parameter name="institutionName" class="java.lang.String" />
+  <parameter name="institutionType" class="java.lang.String" />
+  <parameter name="institutionAddress" class="java.lang.String" />
+  <parameter name="institutionPhone" class="java.lang.String" />
+  <parameter name="institutionEmail" class="java.lang.String" />
+  <parameter name="motto" class="java.lang.String" />
+  <parameter name="generatedDate" class="java.lang.String" />
+
+  <field name="code" class="java.lang.String" />
+  <field name="name" class="java.lang.String" />
+  <field name="capacity" class="java.lang.Integer" />
+  <field name="roomType" class="java.lang.String" />
+  <field name="building" class="java.lang.String" />
+  <field name="status" class="java.lang.String" />
+
+  <title>
+    <band height="140">
+      <!-- HEADER ETABLISSEMENT -->
+      <rectangle>
+        <reportElement x="0" y="0" width="535" height="75" backcolor="#F8FAFC" />
+        <graphicElement>
+          <pen lineWidth="0.5" lineColor="#E2E8F0"/>
+        </graphicElement>
+      </rectangle>
+
+      <textField>
+        <reportElement x="15" y="10" width="350" height="20" forecolor="#1E293B" />
+        <textElement>
+          <font size="14" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{institutionName} != null ? $P{institutionName} : "Établissement Scolaire"]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="15" y="32" width="350" height="15" forecolor="#64748B" />
+        <textElement>
+          <font size="9"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{institutionType} != null ? $P{institutionType} : "Enseignement Général & Technique"]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="15" y="48" width="400" height="15" forecolor="#64748B" />
+        <textElement>
+          <font size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[($P{institutionAddress} != null ? $P{institutionAddress} : "") + " | Tél: " + ($P{institutionPhone} != null ? $P{institutionPhone} : "")]]></textFieldExpression>
+      </textField>
+
+      <!-- TITRE PRINCIPAL -->
+      <textField>
+        <reportElement x="0" y="85" width="535" height="24" forecolor="#1E3A8A" />
+        <textElement textAlignment="Center">
+          <font size="15" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["INVENTAIRE ET LISTE DES SALLES / AMPHIS"]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="0" y="112" width="535" height="18" forecolor="#475569" />
+        <textElement textAlignment="Center">
+          <font size="10" isItalic="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["Locaux, amphithéâtres, salles de cours et laboratoires de l'établissement"]]></textFieldExpression>
+      </textField>
+    </band>
+  </title>
+
+  <columnHeader>
+    <band height="25">
+      <rectangle>
+        <reportElement x="0" y="0" width="535" height="24" backcolor="#1E293B" />
+        <graphicElement>
+          <pen lineWidth="0.0"/>
+        </graphicElement>
+      </rectangle>
+      <staticText>
+        <reportElement x="10" y="4" width="80" height="16" forecolor="#FFFFFF" />
+        <textElement>
+          <font size="9" isBold="true"/>
+        </textElement>
+        <text><![CDATA[CODE SALLE]]></text>
+      </staticText>
+      <staticText>
+        <reportElement x="100" y="4" width="160" height="16" forecolor="#FFFFFF" />
+        <textElement>
+          <font size="9" isBold="true"/>
+        </textElement>
+        <text><![CDATA[NOM DU LOCAL]]></text>
+      </staticText>
+      <staticText>
+        <reportElement x="270" y="4" width="100" height="16" forecolor="#FFFFFF" />
+        <textElement>
+          <font size="9" isBold="true"/>
+        </textElement>
+        <text><![CDATA[TYPE D'ESPACE]]></text>
+      </staticText>
+      <staticText>
+        <reportElement x="380" y="4" width="90" height="16" forecolor="#FFFFFF" />
+        <textElement>
+          <font size="9" isBold="true"/>
+        </textElement>
+        <text><![CDATA[BÂTIMENT]]></text>
+      </staticText>
+      <staticText>
+        <reportElement x="480" y="4" width="50" height="16" forecolor="#FFFFFF" />
+        <textElement textAlignment="Right">
+          <font size="9" isBold="true"/>
+        </textElement>
+        <text><![CDATA[CAPACITÉ]]></text>
+      </staticText>
+    </band>
+  </columnHeader>
+
+  <detail>
+    <band height="22">
+      <rectangle>
+        <reportElement x="0" y="0" width="535" height="22" backcolor="#FFFFFF" />
+        <graphicElement>
+          <pen lineWidth="0.5" lineColor="#E2E8F0"/>
+        </graphicElement>
+      </rectangle>
+      <textField>
+        <reportElement x="10" y="4" width="80" height="15" forecolor="#1E293B" />
+        <textElement>
+          <font size="9" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{code} != null ? $F{code} : "-"]]></textFieldExpression>
+      </textField>
+      <textField>
+        <reportElement x="100" y="4" width="160" height="15" forecolor="#0F172A" />
+        <textElement>
+          <font size="9" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{name} != null ? $F{name} : ""]]></textFieldExpression>
+      </textField>
+      <textField>
+        <reportElement x="270" y="4" width="100" height="15" forecolor="#334155" />
+        <textElement>
+          <font size="9"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{roomType} != null ? $F{roomType} : "-"]]></textFieldExpression>
+      </textField>
+      <textField>
+        <reportElement x="380" y="4" width="90" height="15" forecolor="#475569" />
+        <textElement>
+          <font size="9"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{building} != null ? $F{building} : "Principal"]]></textFieldExpression>
+      </textField>
+      <textField>
+        <reportElement x="480" y="4" width="50" height="15" forecolor="#1E293B" />
+        <textElement textAlignment="Right">
+          <font size="9" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{capacity} != null ? $F{capacity} + " pl." : "-"]]></textFieldExpression>
+      </textField>
+    </band>
+  </detail>
+
+  <pageFooter>
+    <band height="35">
+      <line>
+        <reportElement x="0" y="5" width="535" height="1" forecolor="#CBD5E1"/>
+      </line>
+      <textField>
+        <reportElement x="0" y="12" width="300" height="15" forecolor="#94A3B8" />
+        <textElement>
+          <font size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["Généré le : " + ($P{generatedDate} != null ? $P{generatedDate} : "") + " | School Manager ERP"]]></textFieldExpression>
+      </textField>
+      <textField>
+        <reportElement x="435" y="12" width="100" height="15" forecolor="#94A3B8" />
+        <textElement textAlignment="Right">
+          <font size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["Page " + $V{PAGE_NUMBER}]]></textFieldExpression>
+      </textField>
+    </band>
+  </pageFooter>
+
+</jasperReport>

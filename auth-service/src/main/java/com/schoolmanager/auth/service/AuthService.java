@@ -137,6 +137,27 @@ public class AuthService {
                 permissions,
                 Boolean.TRUE.equals(user.getIsSuperAdmin()));
 
+        Integer maxStudents = 999999;
+        Integer maxStaff = 999999;
+        Integer maxClassrooms = 999999;
+        Integer maxBooks = 999999;
+
+        if (tenant != null) {
+            Optional<SubscriptionPlan> planOpt = subscriptionPlanRepository.findByCode(tenant.getPlanCode());
+            if (planOpt.isPresent()) {
+                SubscriptionPlan plan = planOpt.get();
+                maxStudents = Math.max(tenant.getMaxStudents() != null ? tenant.getMaxStudents() : 0, plan.getMaxStudents() != null ? plan.getMaxStudents() : 0);
+                maxStaff = Math.max(tenant.getMaxStaff() != null ? tenant.getMaxStaff() : 0, plan.getMaxStaff() != null ? plan.getMaxStaff() : 0);
+                maxClassrooms = Math.max(tenant.getMaxClassrooms() != null ? tenant.getMaxClassrooms() : 0, plan.getMaxClassrooms() != null ? plan.getMaxClassrooms() : 0);
+                maxBooks = Math.max(tenant.getMaxBooks() != null ? tenant.getMaxBooks() : 0, plan.getMaxBooks() != null ? plan.getMaxBooks() : 0);
+            } else {
+                maxStudents = tenant.getMaxStudents() != null ? tenant.getMaxStudents() : 999999;
+                maxStaff = tenant.getMaxStaff() != null ? tenant.getMaxStaff() : 999999;
+                maxClassrooms = tenant.getMaxClassrooms() != null ? tenant.getMaxClassrooms() : 999999;
+                maxBooks = tenant.getMaxBooks() != null ? tenant.getMaxBooks() : 999999;
+            }
+        }
+
         return JwtResponse.builder()
                 .token(token)
                 .userId(user.getId())
@@ -152,10 +173,10 @@ public class AuthService {
                 .permissions(permissions)
                 .enabledModules(enabledModules)
                 .planCode(tenant != null ? tenant.getPlanCode() : "SYSTEM")
-                .maxStudents(tenant != null && tenant.getMaxStudents() != null ? tenant.getMaxStudents() : 999999)
-                .maxStaff(tenant != null && tenant.getMaxStaff() != null ? tenant.getMaxStaff() : 999999)
-                .maxClassrooms(tenant != null && tenant.getMaxClassrooms() != null ? tenant.getMaxClassrooms() : 999999)
-                .maxBooks(tenant != null && tenant.getMaxBooks() != null ? tenant.getMaxBooks() : 999999)
+                .maxStudents(maxStudents)
+                .maxStaff(maxStaff)
+                .maxClassrooms(maxClassrooms)
+                .maxBooks(maxBooks)
                 .logoUrl(tenant != null ? tenant.getLogoUrl() : null)
                 .primaryColor(tenant != null ? tenant.getPrimaryColor() : null)
                 .build();

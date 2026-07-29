@@ -36,6 +36,13 @@ public class DatabaseMaintenanceController {
     private final EvaluationRepository evaluationRepository;
     private final StudentGradeRepository studentGradeRepository;
     private final SystemSettingRepository systemSettingRepository;
+    private final CurrencyRepository currencyRepository;
+    private final ExamConvocationRepository examConvocationRepository;
+    private final ExamSessionRepository examSessionRepository;
+    private final RoomRepository roomRepository;
+    private final SchoolEventRepository schoolEventRepository;
+    private final StudentScholarshipRepository studentScholarshipRepository;
+    private final TimetableSlotRepository timetableSlotRepository;
 
     @GetMapping("/export/global")
     public ResponseEntity<Map<String, Object>> exportGlobalData() {

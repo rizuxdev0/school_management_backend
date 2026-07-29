@@ -173,11 +173,11 @@ public class DatabaseSeeder implements CommandLineRunner {
         }
 
         // 4. Initialisation des Rôles système par défaut
-        if (roleRepository.count() == 0) {
-            log.info("Création des rôles par défaut...");
-            List<Permission> allPerms = permissionRepository.findAll();
+        List<Permission> allPerms = permissionRepository.findAll();
+        log.info("Vérification et insertion des rôles système manquants...");
 
-            // SCHOOL_ADMIN (Tous les accès)
+        // SCHOOL_ADMIN (Tous les accès)
+        if (roleRepository.findByCode("SCHOOL_ADMIN").isEmpty()) {
             roleRepository.save(Role.builder()
                     .code("SCHOOL_ADMIN")
                     .nameFr("Administrateur")
@@ -185,9 +185,11 @@ public class DatabaseSeeder implements CommandLineRunner {
                     .isSystemRole(true)
                     .permissions(new HashSet<>(allPerms))
                     .build());
+        }
 
-            // TEACHER (Accès aux notes et présences)
-            List<Permission> teacherPerms = permissionRepository.findAll().stream()
+        // TEACHER (Accès aux notes et présences)
+        if (roleRepository.findByCode("TEACHER").isEmpty()) {
+            List<Permission> teacherPerms = allPerms.stream()
                     .filter(p -> p.getCode().startsWith("EVALUATION") || p.getCode().startsWith("ATTENDANCE") || p.getCode().startsWith("ACADEMIC_VIEW"))
                     .toList();
             roleRepository.save(Role.builder()
@@ -196,6 +198,65 @@ public class DatabaseSeeder implements CommandLineRunner {
                     .nameEn("Teacher")
                     .isSystemRole(true)
                     .permissions(new HashSet<>(teacherPerms))
+                    .build());
+        }
+
+        // STUDENT (Accès restreint à ses propres informations)
+        if (roleRepository.findByCode("STUDENT").isEmpty()) {
+            List<Permission> studentPerms = allPerms.stream()
+                    .filter(p -> p.getCode().equals("ACADEMIC_VIEW") || p.getCode().equals("EVALUATION_VIEW") 
+                            || p.getCode().equals("ATTENDANCE_VIEW") || p.getCode().equals("EXAMS_VIEW") 
+                            || p.getCode().equals("LIBRARY_VIEW"))
+                    .toList();
+            roleRepository.save(Role.builder()
+                    .code("STUDENT")
+                    .nameFr("Élève / Étudiant")
+                    .nameEn("Student")
+                    .isSystemRole(true)
+                    .permissions(new HashSet<>(studentPerms))
+                    .build());
+        }
+
+        // PARENT (Accès suivi de son enfant)
+        if (roleRepository.findByCode("PARENT").isEmpty()) {
+            List<Permission> parentPerms = allPerms.stream()
+                    .filter(p -> p.getCode().equals("ACADEMIC_VIEW") || p.getCode().equals("EVALUATION_VIEW") 
+                            || p.getCode().equals("ATTENDANCE_VIEW") || p.getCode().equals("EXAMS_VIEW"))
+                    .toList();
+            roleRepository.save(Role.builder()
+                    .code("PARENT")
+                    .nameFr("Parent d'Élève")
+                    .nameEn("Parent")
+                    .isSystemRole(true)
+                    .permissions(new HashSet<>(parentPerms))
+                    .build());
+        }
+
+        // LIBRARIAN (Gestionnaire bibliothèque)
+        if (roleRepository.findByCode("LIBRARIAN").isEmpty()) {
+            List<Permission> librarianPerms = allPerms.stream()
+                    .filter(p -> p.getCode().startsWith("LIBRARY"))
+                    .toList();
+            roleRepository.save(Role.builder()
+                    .code("LIBRARIAN")
+                    .nameFr("Bibliothécaire")
+                    .nameEn("Librarian")
+                    .isSystemRole(true)
+                    .permissions(new HashSet<>(librarianPerms))
+                    .build());
+        }
+
+        // ACCOUNTANT (Comptable / Trésorier)
+        if (roleRepository.findByCode("ACCOUNTANT").isEmpty()) {
+            List<Permission> accountantPerms = allPerms.stream()
+                    .filter(p -> p.getCode().startsWith("FINANCE"))
+                    .toList();
+            roleRepository.save(Role.builder()
+                    .code("ACCOUNTANT")
+                    .nameFr("Comptable / Trésorier")
+                    .nameEn("Accountant")
+                    .isSystemRole(true)
+                    .permissions(new HashSet<>(accountantPerms))
                     .build());
         }
 

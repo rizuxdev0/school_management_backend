@@ -1,14 +1,22 @@
 package com.schoolmanager.config.controller;
 
 import com.schoolmanager.config.entity.Classroom;
+import com.schoolmanager.config.entity.Room;
 import com.schoolmanager.config.entity.Student;
 import com.schoolmanager.config.entity.StudentEnrollment;
+import com.schoolmanager.config.entity.TimetableSlot;
 import com.schoolmanager.config.repository.ClassroomRepository;
+import com.schoolmanager.config.repository.RoomRepository;
 import com.schoolmanager.config.repository.StudentEnrollmentRepository;
 import com.schoolmanager.config.repository.StudentRepository;
+import com.schoolmanager.config.repository.TimetableSlotRepository;
 import com.schoolmanager.config.security.SecurityUtils;
+import com.schoolmanager.config.service.AcademicReportService;
+import com.schoolmanager.config.service.TimetableReportService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -18,7 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Contrôleur REST pour la scolarité des élèves (Inscriptions, Classes, Élèves).
+ * Contrôleur REST pour la scolarité des élèves (Inscriptions, Classes, Élèves, Emploi du Temps, Salles & Amphis).
  * Supporte le bypass Super Admin et prévient les attaques IDOR.
  */
 @RestController
@@ -29,6 +37,10 @@ public class StudentAcademicsController {
     private final ClassroomRepository classroomRepository;
     private final StudentRepository studentRepository;
     private final StudentEnrollmentRepository studentEnrollmentRepository;
+    private final TimetableSlotRepository timetableSlotRepository;
+    private final RoomRepository roomRepository;
+    private final TimetableReportService timetableReportService;
+    private final AcademicReportService academicReportService;
 
     // ==================== 1. CLASSES / CLASSROOMS ====================
 
@@ -145,4 +157,131 @@ public class StudentAcademicsController {
         studentEnrollmentRepository.deleteById(id);
         return ResponseEntity.noContent().build();
     }
+
+    // ==================== 4. EMPLOI DU TEMPS / TIMETABLE ====================
+
+    @GetMapping("/timetable/tenant/{tenantId}/year/{yearId}")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
+    public ResponseEntity<List<TimetableSlot>> getTimetableByYear(
+            @PathVariable UUID tenantId,
+            @PathVariable UUID yearId) {
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        return ResponseEntity.ok(timetableSlotRepository.findByTenantIdAndAcademicYearIdOrderByDayOfWeekAscStartTimeAsc(jwtTenantId, yearId));
+    }
+
+    @GetMapping("/timetable/tenant/{tenantId}/year/{yearId}/classroom/{classroomId}")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
+    public ResponseEntity<List<TimetableSlot>> getTimetableByClassroom(
+            @PathVariable UUID tenantId,
+            @PathVariable UUID yearId,
+            @PathVariable UUID classroomId) {
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        return ResponseEntity.ok(timetableSlotRepository.findByTenantIdAndAcademicYearIdAndClassroomIdOrderByDayOfWeekAscStartTimeAsc(jwtTenantId, yearId, classroomId));
+    }
+
+    @PostMapping("/timetable")
+    @PreAuthorize("hasAuthority('ACADEMIC_EDIT')")
+    public ResponseEntity<TimetableSlot> saveTimetableSlot(@RequestBody TimetableSlot slot) {
+        if (!SecurityUtils.isSuperAdmin()) {
+            slot.setTenantId(SecurityUtils.getCurrentTenantId());
+        }
+        return ResponseEntity.ok(timetableSlotRepository.save(slot));
+    }
+
+    @DeleteMapping("/timetable/{id}")
+    @PreAuthorize("hasAuthority('ACADEMIC_EDIT')")
+    public ResponseEntity<Void> deleteTimetableSlot(@PathVariable UUID id) {
+        TimetableSlot slot = timetableSlotRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Créneau horaire introuvable"));
+        SecurityUtils.assertOwnership(slot.getTenantId());
+        timetableSlotRepository.deleteById(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/timetable/tenant/{tenantId}/year/{yearId}/classroom/{classroomId}/pdf")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
+    public ResponseEntity<byte[]> downloadTimetablePdf(
+            @PathVariable UUID tenantId,
+            @PathVariable UUID yearId,
+            @PathVariable UUID classroomId) {
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        byte[] pdfBytes = timetableReportService.generateClassroomTimetablePdf(jwtTenantId, yearId, classroomId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"timetable_" + classroomId + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdfBytes);
+    }
+
+    // ==================== 5. SALLES & AMPHITHEATRES ====================
+
+    @GetMapping("/rooms/tenant/{tenantId}")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
+    public ResponseEntity<List<Room>> getRoomsByTenant(@PathVariable UUID tenantId) {
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        List<Room> rooms = roomRepository.findByTenantId(jwtTenantId);
+        if (rooms.isEmpty()) {
+            rooms = List.of(
+                Room.builder().tenantId(jwtTenantId).code("S-101").name("Salle 101 (RDC)").capacity(40).roomType("CLASSROOM").building("Bâtiment Principal").isActive(true).build(),
+                Room.builder().tenantId(jwtTenantId).code("S-102").name("Salle 102 (RDC)").capacity(40).roomType("CLASSROOM").building("Bâtiment Principal").isActive(true).build(),
+                Room.builder().tenantId(jwtTenantId).code("AMPHI-A").name("Amphithéâtre A (Central)").capacity(150).roomType("AMPHITHEATER").building("Bâtiment A").isActive(true).build(),
+                Room.builder().tenantId(jwtTenantId).code("LAB-INFO").name("Laboratoire Informatique 1").capacity(30).roomType("LABORATORY").building("Bâtiment des Sciences").isActive(true).build()
+            );
+            roomRepository.saveAll(rooms);
+            rooms = roomRepository.findByTenantId(jwtTenantId);
+        }
+        return ResponseEntity.ok(rooms);
+    }
+
+    @PostMapping("/rooms")
+    @PreAuthorize("hasAuthority('ACADEMIC_EDIT')")
+    public ResponseEntity<Room> saveRoom(@RequestBody Room room) {
+        if (!SecurityUtils.isSuperAdmin()) {
+            room.setTenantId(SecurityUtils.getCurrentTenantId());
+        }
+        return ResponseEntity.ok(roomRepository.save(room));
+    }
+
+    @DeleteMapping("/rooms/{id}")
+    @PreAuthorize("hasAuthority('ACADEMIC_EDIT')")
+    public ResponseEntity<Void> deleteRoom(@PathVariable UUID id) {
+        Room room = roomRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Salle / Amphi introuvable"));
+        SecurityUtils.assertOwnership(room.getTenantId());
+        roomRepository.deleteById(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/students/tenant/{tenantId}/pdf")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
+    public ResponseEntity<byte[]> downloadStudentsPdf(@PathVariable UUID tenantId) {
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        byte[] pdfBytes = academicReportService.generateStudentsListPdf(jwtTenantId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"students_list_" + jwtTenantId + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdfBytes);
+    }
+
+    @GetMapping("/classrooms/tenant/{tenantId}/pdf")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
+    public ResponseEntity<byte[]> downloadClassroomsPdf(@PathVariable UUID tenantId) {
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        byte[] pdfBytes = academicReportService.generateClassroomsListPdf(jwtTenantId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"classrooms_list_" + jwtTenantId + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdfBytes);
+    }
+
+    @GetMapping("/rooms/tenant/{tenantId}/pdf")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
+    public ResponseEntity<byte[]> downloadRoomsPdf(@PathVariable UUID tenantId) {
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        byte[] pdfBytes = academicReportService.generateRoomsListPdf(jwtTenantId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"rooms_list_" + jwtTenantId + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdfBytes);
+    }
 }
+

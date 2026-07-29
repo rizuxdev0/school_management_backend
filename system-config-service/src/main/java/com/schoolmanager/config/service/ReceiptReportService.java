@@ -240,7 +240,17 @@ public class ReceiptReportService {
     private String resolveStatus(String s) { if(s==null)return"-"; return switch(s.toUpperCase()){case"PAID"->"REGLE";case"PARTIAL"->"PARTIEL";case"PENDING"->"EN ATTENTE";default->s;}; }
     private String resolvePaymentMethod(String m) { if(m==null)return""; return switch(m.toUpperCase()){case"CASH"->"Especes";case"MOBILE_MONEY"->"Mobile Money";case"BANK_TRANSFER"->"Virement Bancaire";case"CARD"->"Carte Bancaire";default->m;}; }
     private String resolveSchoolType(String t) { if(t==null)return""; return switch(t.toUpperCase()){case"PUBLIC"->"Public";case"PRIVATE"->"Prive";case"SEMI_PRIVATE"->"Semi-Prive";default->t;}; }
-    private String nullSafe(String v) { return v!=null?v:""; }
+    private String nullSafe(String v) {
+        if (v == null) return "";
+        if (v.contains("Ã")) {
+            try {
+                return new String(v.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1), java.nio.charset.StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                return v;
+            }
+        }
+        return v;
+    }
 
     private BufferedImage generateColorImage(String hexColor) {
         try {
