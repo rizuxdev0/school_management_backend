@@ -66,6 +66,16 @@ public class DatabaseMaintenanceController {
         data.put("evaluations", evaluationRepository.findAll());
         data.put("studentGrades", studentGradeRepository.findAll());
         data.put("systemSettings", systemSettingRepository.findAll());
+        
+        // Extended entities
+        data.put("currencies", currencyRepository.findAll());
+        data.put("examConvocations", examConvocationRepository.findAll());
+        data.put("examSessions", examSessionRepository.findAll());
+        data.put("rooms", roomRepository.findAll());
+        data.put("schoolEvents", schoolEventRepository.findAll());
+        data.put("studentScholarships", studentScholarshipRepository.findAll());
+        data.put("timetableSlots", timetableSlotRepository.findAll());
+        
         return ResponseEntity.ok(data);
     }
 
@@ -91,6 +101,15 @@ public class DatabaseMaintenanceController {
         data.put("evaluations", evaluationRepository.findAll().stream().filter(x -> tenantId.equals(x.getTenantId())).toList());
         data.put("studentGrades", studentGradeRepository.findAll().stream().filter(x -> tenantId.equals(x.getTenantId())).toList());
         data.put("systemSettings", systemSettingRepository.findAll().stream().filter(x -> tenantId.equals(x.getTenantId())).toList());
+        
+        // Extended entities
+        data.put("examConvocations", examConvocationRepository.findAll().stream().filter(x -> tenantId.equals(x.getTenantId())).toList());
+        data.put("examSessions", examSessionRepository.findAll().stream().filter(x -> tenantId.equals(x.getTenantId())).toList());
+        data.put("rooms", roomRepository.findAll().stream().filter(x -> tenantId.equals(x.getTenantId())).toList());
+        data.put("schoolEvents", schoolEventRepository.findAll().stream().filter(x -> tenantId.equals(x.getTenantId())).toList());
+        data.put("studentScholarships", studentScholarshipRepository.findAll().stream().filter(x -> tenantId.equals(x.getTenantId())).toList());
+        data.put("timetableSlots", timetableSlotRepository.findAll().stream().filter(x -> tenantId.equals(x.getTenantId())).toList());
+        
         return ResponseEntity.ok(data);
     }
 
@@ -98,6 +117,8 @@ public class DatabaseMaintenanceController {
     @Transactional
     public ResponseEntity<Void> resetDatabase() {
         // Suppression ordonnée pour respecter l'intégrité référentielle
+        examConvocationRepository.deleteAll();
+        examSessionRepository.deleteAll();
         studentGradeRepository.deleteAll();
         evaluationRepository.deleteAll();
         attendanceRepository.deleteAll();
@@ -106,9 +127,11 @@ public class DatabaseMaintenanceController {
         bookLoanRepository.deleteAll();
         bookRepository.deleteAll();
         studentPaymentRepository.deleteAll();
+        studentScholarshipRepository.deleteAll();
         tuitionFeeRepository.deleteAll();
         studentEnrollmentRepository.deleteAll();
         studentRepository.deleteAll();
+        timetableSlotRepository.deleteAll();
         subjectRepository.deleteAll();
         classroomRepository.deleteAll();
         academicPeriodRepository.deleteAll();
@@ -116,6 +139,9 @@ public class DatabaseMaintenanceController {
         academicCycleRepository.deleteAll();
         academicYearRepository.deleteAll();
         gradingSystemRepository.deleteAll();
+        schoolEventRepository.deleteAll();
+        roomRepository.deleteAll();
+        currencyRepository.deleteAll();
         systemSettingRepository.deleteAll();
 
         return ResponseEntity.ok().build();

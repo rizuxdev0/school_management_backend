@@ -115,6 +115,17 @@ public class StudentAcademicsController {
         return ResponseEntity.ok(studentEnrollmentRepository.findByTenantIdAndAcademicYearId(jwtTenantId, yearId));
     }
 
+    @GetMapping("/enrollments/classroom/{classroomId}/year/{yearId}")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
+    public ResponseEntity<List<StudentEnrollment>> getEnrollmentsByClassroom(
+            @PathVariable UUID classroomId,
+            @PathVariable UUID yearId) {
+        Classroom c = classroomRepository.findById(classroomId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Classe introuvable"));
+        SecurityUtils.assertOwnership(c.getTenantId());
+        return ResponseEntity.ok(studentEnrollmentRepository.findByClassroomIdAndAcademicYearId(classroomId, yearId));
+    }
+
     @PostMapping("/enrollments")
     @PreAuthorize("hasAuthority('ACADEMIC_EDIT')")
     public ResponseEntity<StudentEnrollment> enrollStudent(@RequestBody StudentEnrollment enrollment) {

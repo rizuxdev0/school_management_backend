@@ -112,6 +112,26 @@ public class EvaluationAndGradesController {
     public ResponseEntity<List<StudentGrade>> saveGrades(@RequestBody List<StudentGrade> grades) {
         List<StudentGrade> saved = new ArrayList<>();
         for (StudentGrade grade : grades) {
+            if (!SecurityUtils.isSuperAdmin()) {
+                grade.setTenantId(SecurityUtils.getCurrentTenantId());
+            }
+
+            // Resolve transient Student entity to prevent TransientPropertyValueException
+            if (grade.getStudent() != null && grade.getStudent().getId() != null) {
+                Student s = studentRepository.findById(grade.getStudent().getId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable"));
+                SecurityUtils.assertOwnership(s.getTenantId());
+                grade.setStudent(s);
+            }
+
+            // Resolve transient Evaluation entity to prevent TransientPropertyValueException
+            if (grade.getEvaluation() != null && grade.getEvaluation().getId() != null) {
+                Evaluation eval = evaluationRepository.findById(grade.getEvaluation().getId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Évaluation introuvable"));
+                SecurityUtils.assertOwnership(eval.getTenantId());
+                grade.setEvaluation(eval);
+            }
+
             Optional<StudentGrade> existing = studentGradeRepository.findByStudentIdAndEvaluationId(
                     grade.getStudent().getId(),
                     grade.getEvaluation().getId()

@@ -5,11 +5,13 @@ import com.schoolmanager.auth.entity.Permission;
 import com.schoolmanager.auth.entity.Role;
 import com.schoolmanager.auth.entity.SubscriptionPlan;
 import com.schoolmanager.auth.entity.User;
+import com.schoolmanager.auth.entity.GlobalSetting;
 import com.schoolmanager.auth.repository.FeatureModuleRepository;
 import com.schoolmanager.auth.repository.PermissionRepository;
 import com.schoolmanager.auth.repository.RoleRepository;
 import com.schoolmanager.auth.repository.SubscriptionPlanRepository;
 import com.schoolmanager.auth.repository.UserRepository;
+import com.schoolmanager.auth.repository.GlobalSettingRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -20,6 +22,7 @@ import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Seed automatique des données lors du premier lancement du conteneur/application.
@@ -39,6 +42,7 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final PasswordEncoder passwordEncoder;
     private final com.schoolmanager.auth.repository.TenantRepository tenantRepository;
     private final com.schoolmanager.auth.repository.SubscriptionInvoiceRepository subscriptionInvoiceRepository;
+    private final GlobalSettingRepository globalSettingRepository;
 
     @Override
     public void run(String... args) throws Exception {
@@ -290,6 +294,18 @@ public class DatabaseSeeder implements CommandLineRunner {
                         .paymentMethod("TRANSFER")
                         .build());
             });
+        }
+
+        // 7. Initialisation de la configuration globale
+        UUID globalSettingsId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        if (globalSettingRepository.findById(globalSettingsId).isEmpty()) {
+            log.info("Création de la configuration globale par défaut...");
+            globalSettingRepository.save(GlobalSetting.builder()
+                    .id(globalSettingsId)
+                    .maintenanceMode(false)
+                    .announcementText(null)
+                    .announcementEnd(null)
+                    .build());
         }
 
         log.info("Seeding de base terminé.");

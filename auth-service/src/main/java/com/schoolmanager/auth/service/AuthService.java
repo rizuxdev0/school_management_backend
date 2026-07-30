@@ -28,6 +28,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final PasswordValidator passwordValidator;
+    private final GlobalSettingRepository globalSettingRepository;
 
     /**
      * Authentifie l'utilisateur et retourne un JWT complet avec tous ses droits.
@@ -61,6 +62,15 @@ public class AuthService {
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new RuntimeException("Mot de passe incorrect");
+        }
+
+        // Blocage de connexion si la plateforme est en maintenance globale
+        if (!Boolean.TRUE.equals(user.getIsSuperAdmin())) {
+            UUID globalSettingsId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            GlobalSetting setting = globalSettingRepository.findById(globalSettingsId).orElse(null);
+            if (setting != null && setting.isMaintenanceMode()) {
+                throw new RuntimeException("MAINTENANCE_MODE");
+            }
         }
 
         return buildJwtResponse(user);

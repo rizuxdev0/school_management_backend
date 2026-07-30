@@ -4,10 +4,12 @@ import com.schoolmanager.config.entity.Book;
 import com.schoolmanager.config.entity.BookLoan;
 import com.schoolmanager.config.entity.ExamConvocation;
 import com.schoolmanager.config.entity.ExamSession;
+import com.schoolmanager.config.entity.Student;
 import com.schoolmanager.config.repository.BookLoanRepository;
 import com.schoolmanager.config.repository.BookRepository;
 import com.schoolmanager.config.repository.ExamConvocationRepository;
 import com.schoolmanager.config.repository.ExamSessionRepository;
+import com.schoolmanager.config.repository.StudentRepository;
 import com.schoolmanager.config.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -34,6 +36,7 @@ public class ExamsAndLibraryController {
     private final ExamConvocationRepository examConvocationRepository;
     private final BookRepository bookRepository;
     private final BookLoanRepository bookLoanRepository;
+    private final StudentRepository studentRepository;
 
     // ==================== 1. SESSIONS D'EXAMENS ====================
 
@@ -74,6 +77,26 @@ public class ExamsAndLibraryController {
     @PostMapping("/exams/convocations")
     @PreAuthorize("hasAuthority('EXAMS_EDIT')")
     public ResponseEntity<ExamConvocation> saveConvocation(@RequestBody ExamConvocation convocation) {
+        if (!SecurityUtils.isSuperAdmin()) {
+            convocation.setTenantId(SecurityUtils.getCurrentTenantId());
+        }
+
+        // Resolve transient Student entity to prevent TransientPropertyValueException
+        if (convocation.getStudent() != null && convocation.getStudent().getId() != null) {
+            Student s = studentRepository.findById(convocation.getStudent().getId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable"));
+            SecurityUtils.assertOwnership(s.getTenantId());
+            convocation.setStudent(s);
+        }
+
+        // Resolve transient ExamSession entity to prevent TransientPropertyValueException
+        if (convocation.getExamSession() != null && convocation.getExamSession().getId() != null) {
+            ExamSession session = examSessionRepository.findById(convocation.getExamSession().getId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session d'examen introuvable"));
+            SecurityUtils.assertOwnership(session.getTenantId());
+            convocation.setExamSession(session);
+        }
+
         Optional<ExamConvocation> existing = examConvocationRepository.findByStudentIdAndExamSessionId(
                 convocation.getStudent().getId(),
                 convocation.getExamSession().getId()
@@ -176,6 +199,18 @@ public class ExamsAndLibraryController {
         if (!SecurityUtils.isSuperAdmin()) {
             loan.setTenantId(SecurityUtils.getCurrentTenantId());
         }
+
+        // Set properly resolved Book reference to prevent TransientPropertyValueException
+        loan.setBook(book);
+
+        // Resolve transient Student entity to prevent TransientPropertyValueException
+        if (loan.getStudent() != null && loan.getStudent().getId() != null) {
+            Student s = studentRepository.findById(loan.getStudent().getId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable"));
+            SecurityUtils.assertOwnership(s.getTenantId());
+            loan.setStudent(s);
+        }
+
         loan.setStatus("ACTIVE");
         return ResponseEntity.ok(bookLoanRepository.save(loan));
     }

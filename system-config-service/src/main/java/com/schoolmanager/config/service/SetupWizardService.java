@@ -79,6 +79,7 @@ public class SetupWizardService {
                 case "PRIMARY"    -> createPrimary(dto.getTenantId(), isFrench);
                 case "MIDDLE"     -> createMiddle(dto.getTenantId(), isFrench);
                 case "HIGH"       -> createHigh(dto.getTenantId(), isFrench);
+                case "BTS"        -> createBTS(dto.getTenantId(), isFrench);
                 case "UNIVERSITY" -> createUniversity(dto.getTenantId(), isFrench);
                 default           -> createMixed(dto.getTenantId(), isFrench); // MIXED
             }
@@ -391,13 +392,52 @@ public class SetupWizardService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // ENSEIGNEMENT TECHNIQUE / BTS (Brevet de Technicien Supérieur)
+    // ─────────────────────────────────────────────────────────────────────────
+    private void createBTS(UUID tenantId, boolean fr) {
+        createBtsWithOrder(tenantId, fr, 1);
+    }
+
+    private void createBtsWithOrder(UUID tenantId, boolean fr, int order) {
+        AcademicCycle bts = academicCycleRepository.save(AcademicCycle.builder()
+                .tenantId(tenantId).code("BTS")
+                .nameFr("Brevet de Technicien Supérieur").nameEn("Higher National Diploma")
+                .sequenceOrder(order).build());
+
+        String[] tracks   = {"GL", "FCG", "RIT", "MKT"};
+        String[] tracksFr = {"Génie Logiciel", "Finance, Comptabilité & Gestion", "Réseaux & Informatique Télécoms", "Marketing & Communication"};
+        String[] tracksEn = {"Software Engineering", "Finance, Accounting & Management", "Networks & Telecom IT", "Marketing & Communication"};
+
+        String[] btsCodes   = {"BTS1", "BTS2"};
+        String[] btsNamesFr = {"BTS 1ère année", "BTS 2ème année"};
+        String[] btsNamesEn = {"1st Year BTS", "2nd Year BTS"};
+
+        for (int i = 0; i < btsCodes.length; i++) {
+            AcademicLevel lvl = academicLevelRepository.save(AcademicLevel.builder()
+                    .tenantId(tenantId).cycle(bts)
+                    .code(btsCodes[i])
+                    .nameFr(fr ? btsNamesFr[i] : btsNamesEn[i])
+                    .nameEn(btsNamesEn[i])
+                    .sequenceOrder(i + 1).build());
+            for (int t = 0; t < tracks.length; t++) {
+                classroomRepository.save(Classroom.builder()
+                        .tenantId(tenantId)
+                        .code(btsCodes[i] + "-" + tracks[t])
+                        .name(btsCodes[i] + " " + (fr ? tracksFr[t] : tracksEn[t]))
+                        .academicLevel(lvl).capacity(60).isActive(true).build());
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // MULTI-NIVEAUX (MIXED) — Tous les cycles du primaire à l'université
     // ─────────────────────────────────────────────────────────────────────────
     private void createMixed(UUID tenantId, boolean fr) {
         createPrimaryWithOrder(tenantId, fr, 1);
         createMiddleWithOrder(tenantId, fr, 2);
         createHighWithOrder(tenantId, fr, 3);
-        createUniversityWithOrder(tenantId, fr, 4);
+        createBtsWithOrder(tenantId, fr, 4);
+        createUniversityWithOrder(tenantId, fr, 5);
     }
 
     // ─── Variantes avec sequenceOrder configurable pour MIXED ────────────────

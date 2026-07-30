@@ -34,15 +34,20 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ErrorResponse> handleRuntimeException(RuntimeException ex, WebRequest request) {
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+        if ("MAINTENANCE_MODE".equals(ex.getMessage())) {
+            status = HttpStatus.SERVICE_UNAVAILABLE;
+        }
+
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(ZonedDateTime.now())
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                .status(status.value())
+                .error(status.getReasonPhrase())
                 .message(ex.getMessage())
                 .path(request.getDescription(false).replace("uri=", ""))
                 .build();
 
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+        return new ResponseEntity<>(error, status);
     }
 
     @Data

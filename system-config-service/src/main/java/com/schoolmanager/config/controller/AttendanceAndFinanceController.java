@@ -24,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.schoolmanager.config.entity.Classroom;
 import com.schoolmanager.config.entity.StudentEnrollment;
 import com.schoolmanager.config.repository.StudentEnrollmentRepository;
+import com.schoolmanager.config.repository.ClassroomRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -51,6 +52,7 @@ public class AttendanceAndFinanceController {
     private final StudentPaymentRepository studentPaymentRepository;
     private final StudentRepository studentRepository;
     private final StudentEnrollmentRepository studentEnrollmentRepository;
+    private final ClassroomRepository classroomRepository;
     private final com.schoolmanager.config.service.ReceiptReportService receiptReportService;
     private final StudentScholarshipRepository studentScholarshipRepository;
 
@@ -73,6 +75,23 @@ public class AttendanceAndFinanceController {
             if (!SecurityUtils.isSuperAdmin()) {
                 att.setTenantId(SecurityUtils.getCurrentTenantId());
             }
+
+            // Resolve transient Student entity to prevent TransientPropertyValueException
+            if (att.getStudent() != null && att.getStudent().getId() != null) {
+                Student s = studentRepository.findById(att.getStudent().getId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable"));
+                SecurityUtils.assertOwnership(s.getTenantId());
+                att.setStudent(s);
+            }
+
+            // Resolve transient Classroom entity to prevent TransientPropertyValueException
+            if (att.getClassroom() != null && att.getClassroom().getId() != null) {
+                Classroom c = classroomRepository.findById(att.getClassroom().getId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Classe introuvable"));
+                SecurityUtils.assertOwnership(c.getTenantId());
+                att.setClassroom(c);
+            }
+
             Optional<Attendance> existing = attendanceRepository.findByStudentIdAndAttendanceDate(
                     att.getStudent().getId(),
                     att.getAttendanceDate()
@@ -285,6 +304,15 @@ public class AttendanceAndFinanceController {
         if (!SecurityUtils.isSuperAdmin()) {
             payment.setTenantId(SecurityUtils.getCurrentTenantId());
         }
+
+        // Resolve transient Student entity to prevent TransientPropertyValueException
+        if (payment.getStudent() != null && payment.getStudent().getId() != null) {
+            Student s = studentRepository.findById(payment.getStudent().getId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable"));
+            SecurityUtils.assertOwnership(s.getTenantId());
+            payment.setStudent(s);
+        }
+
         // Auto-generate receipt number if missing
         if (payment.getReceiptNumber() == null || payment.getReceiptNumber().trim().isEmpty()) {
             long count = studentPaymentRepository.count() + 1;
@@ -330,6 +358,15 @@ public class AttendanceAndFinanceController {
         if (!SecurityUtils.isSuperAdmin()) {
             scholarship.setTenantId(SecurityUtils.getCurrentTenantId());
         }
+
+        // Resolve transient Student entity to prevent TransientPropertyValueException
+        if (scholarship.getStudent() != null && scholarship.getStudent().getId() != null) {
+            Student s = studentRepository.findById(scholarship.getStudent().getId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable"));
+            SecurityUtils.assertOwnership(s.getTenantId());
+            scholarship.setStudent(s);
+        }
+
         return ResponseEntity.ok(studentScholarshipRepository.save(scholarship));
     }
 
