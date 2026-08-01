@@ -43,6 +43,7 @@
   <parameter name="logoBase64"         class="java.lang.String"/>
   <parameter name="absences"           class="java.lang.String"/>
   <parameter name="principalName"      class="java.lang.String"/>
+  <parameter name="principalSignatureBase64" class="java.lang.String"/>
 
 
   <!-- ===== FIELDS (from JRBeanCollectionDataSource) ===== -->
@@ -452,6 +453,16 @@ ____________________________________________]]></text>
 
 ________________________________________]]></text>
       </staticText>
+
+      <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle">
+        <reportElement x="290" y="120" width="200" height="28"/>
+        <imageExpression><![CDATA[
+          $P{principalSignatureBase64} != null && !$P{principalSignatureBase64}.isEmpty()
+            ? new java.io.ByteArrayInputStream(java.util.Base64.getDecoder().decode(
+                $P{principalSignatureBase64}.contains(",") ? $P{principalSignatureBase64}.split(",")[1] : $P{principalSignatureBase64}))
+            : null
+        ]]></imageExpression>
+      </image>
 
       <!-- MENTION box -->
       <rectangle>

@@ -55,6 +55,7 @@ public class AttendanceAndFinanceController {
     private final ClassroomRepository classroomRepository;
     private final com.schoolmanager.config.service.ReceiptReportService receiptReportService;
     private final StudentScholarshipRepository studentScholarshipRepository;
+    private final com.schoolmanager.config.service.AcademicReportService academicReportService;
 
     // ==================== 1. ABSENCES & ASSIDUITÉ ====================
 
@@ -64,6 +65,33 @@ public class AttendanceAndFinanceController {
             @PathVariable UUID classroomId,
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return ResponseEntity.ok(attendanceRepository.findByClassroomIdAndAttendanceDate(classroomId, date));
+    }
+
+    @GetMapping("/attendance/classroom/{classroomId}/date/{date}/pdf")
+    @PreAuthorize("hasAuthority('ATTENDANCE_VIEW')")
+    public ResponseEntity<byte[]> downloadAttendanceListPdf(
+            @PathVariable UUID classroomId,
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        UUID tenantId = SecurityUtils.getCurrentTenantId();
+        byte[] pdf = academicReportService.generateAttendanceListPdf(tenantId, classroomId, date);
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setContentType(org.springframework.http.MediaType.APPLICATION_PDF);
+        headers.setContentDispositionFormData("attachment", "liste_presence_" + date + ".pdf");
+        return ResponseEntity.ok().headers(headers).body(pdf);
+    }
+
+    @GetMapping("/attendance/classroom/{classroomId}/range/pdf")
+    @PreAuthorize("hasAuthority('ATTENDANCE_VIEW')")
+    public ResponseEntity<byte[]> downloadAttendanceListRangePdf(
+            @PathVariable UUID classroomId,
+            @RequestParam("startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam("endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        UUID tenantId = SecurityUtils.getCurrentTenantId();
+        byte[] pdf = academicReportService.generateAttendanceListRangePdf(tenantId, classroomId, startDate, endDate);
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setContentType(org.springframework.http.MediaType.APPLICATION_PDF);
+        headers.setContentDispositionFormData("attachment", "liste_presence_" + startDate + "_au_" + endDate + ".pdf");
+        return ResponseEntity.ok().headers(headers).body(pdf);
     }
 
     @PostMapping("/attendance/save-all")

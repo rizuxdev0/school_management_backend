@@ -57,6 +57,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Boolean isSuperAdmin = claims.get("isSuperAdmin", Boolean.class);
                 String planCode = claims.get("planCode", String.class);
                 String rawTenantId = claims.get("tenantId", String.class);
+                String email = claims.get("email", String.class);
+                String phoneNumber = claims.get("phoneNumber", String.class);
+                String rawUserId = claims.get("userId", String.class);
+                java.util.UUID userId = (rawUserId != null && !rawUserId.isBlank()) ? java.util.UUID.fromString(rawUserId) : null;
 
                 // --- VÉRIFICATION DYNAMIQUE DU STATUT DU TENANT (SAAS SECURITY CONTROL) ---
                 if (!Boolean.TRUE.equals(isSuperAdmin) && rawTenantId != null && !rawTenantId.isBlank()) {
@@ -130,7 +134,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     permissions.forEach(perm -> authorities.add(new SimpleGrantedAuthority(perm)));
                 }
 
-                UserPrincipal principal = new UserPrincipal(username, rawTenantId, isSuperAdmin, planCode);
+                UserPrincipal principal = new UserPrincipal(username, rawTenantId, isSuperAdmin, planCode, email, phoneNumber, userId);
 
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         principal, null, authorities);

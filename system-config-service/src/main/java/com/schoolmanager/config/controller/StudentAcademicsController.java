@@ -21,6 +21,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+
+import com.schoolmanager.config.dto.ImportResultDto;
+import com.schoolmanager.config.service.AcademicImportExportService;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 
 import java.util.List;
 import java.util.UUID;
@@ -32,6 +41,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/system/academics")
 @RequiredArgsConstructor
+@Tag(name = "Gestion Académique", description = "Endpoints pour gérer la scolarité des élèves, inscriptions, classes, emplois du temps et infrastructures.")
 public class StudentAcademicsController {
 
     private final ClassroomRepository classroomRepository;
@@ -41,6 +51,7 @@ public class StudentAcademicsController {
     private final RoomRepository roomRepository;
     private final TimetableReportService timetableReportService;
     private final AcademicReportService academicReportService;
+    private final AcademicImportExportService academicImportExportService;
 
     // ==================== 1. CLASSES / CLASSROOMS ====================
 
@@ -72,6 +83,7 @@ public class StudentAcademicsController {
 
     // ==================== 2. ÉLÈVES / STUDENTS ====================
 
+    @Operation(summary = "Lister les élèves", description = "Récupère tous les élèves enregistrés pour le tenant spécifié.")
     @GetMapping("/students/tenant/{tenantId}")
     @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
     public ResponseEntity<List<Student>> getStudentsByTenant(@PathVariable UUID tenantId) {
@@ -79,9 +91,10 @@ public class StudentAcademicsController {
         return ResponseEntity.ok(studentRepository.findByTenantId(jwtTenantId));
     }
 
+    @Operation(summary = "Enregistrer ou modifier un élève", description = "Crée ou met à jour les informations d'un élève avec validation stricte (JSR-380).")
     @PostMapping("/students")
     @PreAuthorize("hasAuthority('ACADEMIC_EDIT')")
-    public ResponseEntity<Student> saveStudent(@RequestBody Student student) {
+    public ResponseEntity<Student> saveStudent(@Valid @RequestBody Student student) {
         if (!SecurityUtils.isSuperAdmin()) {
             student.setTenantId(SecurityUtils.getCurrentTenantId());
         }
@@ -94,6 +107,7 @@ public class StudentAcademicsController {
         return ResponseEntity.ok(studentRepository.save(student));
     }
 
+    @Operation(summary = "Supprimer un élève", description = "Supprime un profil d'élève par son UUID.")
     @DeleteMapping("/students/{id}")
     @PreAuthorize("hasAuthority('ACADEMIC_EDIT')")
     public ResponseEntity<Void> deleteStudent(@PathVariable UUID id) {
@@ -294,5 +308,151 @@ public class StudentAcademicsController {
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdfBytes);
     }
-}
 
+    // ==================== EXPORTS EXEMPLAIRES (TEMPLATES) & IMPORTS EXCEL/CSV ====================
+
+    @GetMapping("/classrooms/template/excel")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
+    public ResponseEntity<byte[]> downloadClassroomTemplate() {
+        byte[] excelBytes = academicImportExportService.generateClassroomTemplateExcel();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"modele_import_classes.xlsx\"")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excelBytes);
+    }
+
+    @PostMapping(value = "/classrooms/import/excel", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('ACADEMIC_EDIT')")
+    public ResponseEntity<ImportResultDto> importClassrooms(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("tenantId") UUID tenantId) throws IOException {
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        ImportResultDto result = academicImportExportService.importClassroomsExcel(jwtTenantId, file.getInputStream(), file.getOriginalFilename());
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/students/template/excel")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
+    public ResponseEntity<byte[]> downloadStudentTemplate() {
+        byte[] excelBytes = academicImportExportService.generateStudentTemplateExcel();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"modele_import_eleves.xlsx\"")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excelBytes);
+    }
+
+    @PostMapping(value = "/students/import/excel", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('ACADEMIC_EDIT')")
+    public ResponseEntity<ImportResultDto> importStudents(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("tenantId") UUID tenantId) throws IOException {
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        ImportResultDto result = academicImportExportService.importStudentsExcel(jwtTenantId, file.getInputStream(), file.getOriginalFilename());
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/rooms/template/excel")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
+    public ResponseEntity<byte[]> downloadRoomTemplate() {
+        byte[] excelBytes = academicImportExportService.generateRoomTemplateExcel();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"modele_import_salles.xlsx\"")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excelBytes);
+    }
+
+    @PostMapping(value = "/rooms/import/excel", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('ACADEMIC_EDIT')")
+    public ResponseEntity<ImportResultDto> importRooms(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("tenantId") UUID tenantId) throws IOException {
+        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
+        ImportResultDto result = academicImportExportService.importRoomsExcel(jwtTenantId, file.getInputStream(), file.getOriginalFilename());
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/students/{studentId}/certificate")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW') or hasRole('PARENT')")
+    public ResponseEntity<byte[]> getSchoolCertificate(
+            @PathVariable UUID studentId,
+            @RequestParam(value = "lang", defaultValue = "fr") String lang) {
+        UUID tenantId = SecurityUtils.getCurrentTenantId();
+        
+        // Validation anti-IDOR pour les parents
+        boolean isParent = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication()
+                .getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_PARENT"));
+        if (isParent) {
+            com.schoolmanager.config.security.UserPrincipal principal = SecurityUtils.getCurrentPrincipal();
+            Student student = studentRepository.findById(studentId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable"));
+            boolean phoneMatches = student.getParentPhone() != null && student.getParentPhone().equals(principal.getPhoneNumber());
+            boolean emailMatches = student.getEmail() != null && student.getEmail().equals(principal.getEmail());
+            if (!phoneMatches && !emailMatches) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Accès non autorisé au certificat de cet élève");
+            }
+        }
+
+        byte[] pdf = academicReportService.generateSchoolCertificatePdf(tenantId, studentId, lang);
+        
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"certificat_scolarite.pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
+    }
+
+    // ==================== 7. LIAISON PARENT → ENFANTS ====================
+
+    /**
+     * DTO d'entrée pour la liaison d'un parent à ses enfants.
+     */
+    record LinkParentRequest(String parentPhone, List<UUID> studentIds) {}
+
+    /**
+     * Lie un compte parent (via son numéro de téléphone) à une liste d'élèves.
+     * Met à jour le champ parentPhone de chaque élève sélectionné.
+     * Réinitialise également le parentPhone des anciens enfants qui ne sont plus dans la liste,
+     * afin d'éviter tout lien résiduel (ghost links).
+     *
+     * @param request DTO contenant le téléphone du parent et les IDs des élèves enfants
+     */
+    @PostMapping("/students/link-parent")
+    @PreAuthorize("hasAuthority('ACADEMIC_EDIT')")
+    public ResponseEntity<Void> linkParentToStudents(@RequestBody LinkParentRequest request) {
+        UUID tenantId = SecurityUtils.getCurrentTenantId();
+
+        // 1. Retirer ce numéro de téléphone des anciens enfants non retenus dans la nouvelle sélection
+        List<Student> previousLinked = studentRepository.findByTenantIdAndParentPhone(tenantId, request.parentPhone());
+        for (Student s : previousLinked) {
+            if (!request.studentIds().contains(s.getId())) {
+                s.setParentPhone(null);
+                studentRepository.save(s);
+            }
+        }
+
+        // 2. Assigner le numéro de téléphone aux nouveaux enfants sélectionnés
+        for (UUID studentId : request.studentIds()) {
+            Student student = studentRepository.findById(studentId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable : " + studentId));
+            SecurityUtils.assertOwnership(student.getTenantId());
+            student.setParentPhone(request.parentPhone());
+            studentRepository.save(student);
+        }
+
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Récupère les élèves actuellement liés à un numéro de téléphone parent donné.
+     * Permet d'initialiser le formulaire d'édition d'un compte parent avec ses enfants déjà sélectionnés.
+     *
+     * @param parentPhone Le numéro de téléphone du parent
+     */
+    @GetMapping("/students/by-parent-phone")
+    @PreAuthorize("hasAuthority('ACADEMIC_VIEW')")
+    public ResponseEntity<List<Student>> getStudentsByParentPhone(
+            @RequestParam String parentPhone) {
+        UUID tenantId = SecurityUtils.getCurrentTenantId();
+        return ResponseEntity.ok(studentRepository.findByTenantIdAndParentPhone(tenantId, parentPhone));
+    }
+
+}

@@ -143,6 +143,18 @@ public class ReceiptReportService {
         params.put("totalExigible",      formatAmount(totalExigible));
         params.put("totalPaid",          formatAmount(totalPaid));
         params.put("balance",            formatAmount(balance));
+
+        // --- SIGNATURE DU DIRECTEUR ---
+        // Injection de la signature numérique stockée dans les paramètres de l'établissement.
+        // Le template JRXML affiche l'image si le paramètre est non-null/non-vide,
+        // sinon il replie sur le texte statique "Signature et Cachet".
+        String signature = setting.getPrincipalSignatureBase64();
+        params.put("signatureBase64", (signature != null && !signature.isBlank()) ? signature : "");
+
+        // Libellé du signataire : nom du directeur si renseigné, sinon "Le Directeur".
+        String directorName = setting.getDirectorName();
+        params.put("directorLabel", (directorName != null && !directorName.isBlank()) ? directorName : "Le Directeur");
+
         return params;
     }
 

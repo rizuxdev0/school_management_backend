@@ -36,4 +36,11 @@ public class TenantRegistrationDto {
 
     @NotBlank(message = "Le nom est obligatoire")
     private String adminLastName;
+
+    private String institutionType;
+    private String systemPreset;
+    private String currencyCode;
+    private String currencySymbol;
+    private String currencyNameFr;
+    private String defaultLanguage;
 }

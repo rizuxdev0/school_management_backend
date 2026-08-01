@@ -391,6 +391,11 @@ public class BulletinReportService {
         params.put("logoBase64",    normalizedLogo);
         params.put("LOGO_IMAGE",    resolveLogo(normalizedLogo, setting.getLogoUrl(), setting.getTenantId()));
 
+        // Signature du directeur (Base64 string + InputStream pour JasperReports)
+        String normalizedSignature = normalizeLogoToPngBase64(setting.getPrincipalSignatureBase64());
+        params.put("principalSignatureBase64", normalizedSignature);
+        params.put("PRINCIPAL_SIGNATURE_IMAGE", resolveLogo(normalizedSignature, null, setting.getTenantId()));
+
         // === Contexte académique ===
         params.put("className",         nullSafe(classroom.getName()));
         params.put("classEffective",     String.valueOf(totalStudents));
@@ -398,8 +403,9 @@ public class BulletinReportService {
         params.put("academicYear",       yearId.toString());                   // à enrichir avec libellé réel
         params.put("absences",           "0");                                 // à enrichir
 
-        // Directeur / principal
-        params.put("principalName",      "");
+        // Nom du directeur signataire (affiché sous la signature sur les bulletins)
+        String dirName = setting.getDirectorName();
+        params.put("principalName", (dirName != null && !dirName.isBlank()) ? dirName : "Le Directeur");
 
         // Compatibilité avec les anciens paramètres de l'ancien template
         params.put("SCHOOL_NAME",        nullSafe(setting.getInstitutionName()));

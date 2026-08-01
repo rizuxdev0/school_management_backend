@@ -24,7 +24,7 @@ public class JwtUtils {
     @Value("${app.jwt.expiration-ms}")
     private int jwtExpirationMs;
 
-    public String generateJwtToken(Authentication authentication, UUID tenantId, String tenantCode, String planCode, List<String> enabledModules, List<String> roles, List<String> permissions, boolean isSuperAdmin) {
+    public String generateJwtToken(Authentication authentication, UUID tenantId, String tenantCode, String planCode, List<String> enabledModules, List<String> roles, List<String> permissions, boolean isSuperAdmin, String email, String phoneNumber, UUID userId) {
         String username = authentication.getName();
 
         return Jwts.builder()
@@ -36,7 +36,10 @@ public class JwtUtils {
                         "enabledModules", enabledModules,
                         "roles", roles,
                         "permissions", permissions,
-                        "isSuperAdmin", isSuperAdmin
+                        "isSuperAdmin", isSuperAdmin,
+                        "email", email != null ? email : "",
+                        "phoneNumber", phoneNumber != null ? phoneNumber : "",
+                        "userId", userId != null ? userId.toString() : ""
                 ))
                 .issuedAt(new Date())
                 .expiration(new Date((new Date()).getTime() + jwtExpirationMs))

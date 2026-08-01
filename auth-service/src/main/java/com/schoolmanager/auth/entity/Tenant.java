@@ -53,6 +53,24 @@ public class Tenant {
     @Column(name = "primary_color", length = 7)
     private String primaryColor;
 
+    @Column(name = "institution_type", length = 50)
+    private String institutionType;
+
+    @Column(name = "system_preset", length = 30)
+    private String systemPreset;
+
+    @Column(name = "currency_code", length = 10)
+    private String currencyCode;
+
+    @Column(name = "currency_symbol", length = 10)
+    private String currencySymbol;
+
+    @Column(name = "currency_name_fr", length = 50)
+    private String currencyNameFr;
+
+    @Column(name = "default_language", length = 10)
+    private String defaultLanguage;
+
     @Column(name = "max_classrooms")
     private Integer maxClassrooms;
 

@@ -36,4 +36,10 @@ public class JwtResponse {
     private Integer maxBooks;
     private String logoUrl;
     private String primaryColor;
+    private String institutionType;
+    private String systemPreset;
+    private String currencyCode;
+    private String currencySymbol;
+    private String currencyNameFr;
+    private String defaultLanguage;
 }

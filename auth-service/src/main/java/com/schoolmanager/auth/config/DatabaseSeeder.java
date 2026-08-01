@@ -305,6 +305,11 @@ public class DatabaseSeeder implements CommandLineRunner {
                     .maintenanceMode(false)
                     .announcementText(null)
                     .announcementEnd(null)
+                    .passwordMinLength(8)
+                    .passwordRequireUppercase(true)
+                    .passwordRequireLowercase(true)
+                    .passwordRequireNumber(true)
+                    .passwordRequireSpecial(true)
                     .build());
         }
 

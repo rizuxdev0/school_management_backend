@@ -30,4 +30,24 @@ public class GlobalSetting {
 
     @Column(name = "announcement_end")
     private LocalDateTime announcementEnd;
+
+    @Column(name = "password_min_length", nullable = false, columnDefinition = "integer default 8")
+    @Builder.Default
+    private int passwordMinLength = 8;
+
+    @Column(name = "password_require_uppercase", nullable = false, columnDefinition = "boolean default true")
+    @Builder.Default
+    private boolean passwordRequireUppercase = true;
+
+    @Column(name = "password_require_lowercase", nullable = false, columnDefinition = "boolean default true")
+    @Builder.Default
+    private boolean passwordRequireLowercase = true;
+
+    @Column(name = "password_require_number", nullable = false, columnDefinition = "boolean default true")
+    @Builder.Default
+    private boolean passwordRequireNumber = true;
+
+    @Column(name = "password_require_special", nullable = false, columnDefinition = "boolean default true")
+    @Builder.Default
+    private boolean passwordRequireSpecial = true;
 }

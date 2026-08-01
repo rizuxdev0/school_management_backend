@@ -40,6 +40,7 @@ public class EvaluationAndGradesController {
     private final StudentRepository studentRepository;
 
     private final com.schoolmanager.config.service.BulletinCalculationService bulletinCalculationService;
+    private final com.schoolmanager.config.service.NotificationService notificationService;
 
     // ==================== 1. MATIÈRES / SUBJECTS ====================
 
@@ -136,13 +137,31 @@ public class EvaluationAndGradesController {
                     grade.getStudent().getId(),
                     grade.getEvaluation().getId()
             );
+            StudentGrade savedGrade;
             if (existing.isPresent()) {
                 StudentGrade e = existing.get();
                 e.setScore(grade.getScore());
                 e.setRemarks(grade.getRemarks());
-                saved.add(studentGradeRepository.save(e));
+                savedGrade = studentGradeRepository.save(e);
             } else {
-                saved.add(studentGradeRepository.save(grade));
+                savedGrade = studentGradeRepository.save(grade);
+            }
+            saved.add(savedGrade);
+
+            // Déclencher une notification de publication de note
+            try {
+                UUID tenantId = savedGrade.getTenantId();
+                Student s = savedGrade.getStudent();
+                Evaluation eval = savedGrade.getEvaluation();
+                String subjectName = eval.getSubject() != null ? eval.getSubject().getNameFr() : "une matière";
+                String title = "Nouvelle note disponible";
+                String message = String.format("La note de %s %s pour l'évaluation '%s' en %s a été publiée : %s/%s.",
+                        s.getFirstName(), s.getLastName(), eval.getTitle(), subjectName, savedGrade.getScore(), eval.getMaxScore());
+
+                // Envoyer la notification au parent via son téléphone et à l'élève via son email
+                notificationService.sendNotification(tenantId, null, s.getParentPhone(), s.getEmail(), title, message, "GRADE");
+            } catch (Exception ex) {
+                // Ignore failure to ensure the grade save transaction is not aborted
             }
         }
         return ResponseEntity.ok(saved);

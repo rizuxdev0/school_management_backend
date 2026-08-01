@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+  name="attendance_report"
+  pageWidth="595" pageHeight="842" orientation="Portrait"
+  columnWidth="535" leftMargin="30" rightMargin="30" topMargin="20" bottomMargin="20"
+  whenNoDataType="AllSectionsNoDetail">
+
+  <parameter name="institutionName" class="java.lang.String" />
+  <parameter name="institutionType" class="java.lang.String" />
+  <parameter name="institutionAddress" class="java.lang.String" />
+  <parameter name="institutionPhone" class="java.lang.String" />
+  <parameter name="institutionEmail" class="java.lang.String" />
+  <parameter name="motto" class="java.lang.String" />
+  <parameter name="generatedDate" class="java.lang.String" />
+  <parameter name="classroomName" class="java.lang.String" />
+  <parameter name="attendanceDate" class="java.lang.String" />
+
+  <field name="registrationNumber" class="java.lang.String" />
+  <field name="fullName" class="java.lang.String" />
+  <field name="status" class="java.lang.String" />
+  <field name="remarks" class="java.lang.String" />
+
+  <title>
+    <band height="145">
+      <!-- HEADER ETABLISSEMENT -->
+      <rectangle>
+        <reportElement x="0" y="0" width="535" height="75" backcolor="#F8FAFC" />
+        <graphicElement>
+          <pen lineWidth="0.5" lineColor="#E2E8F0"/>
+        </graphicElement>
+      </rectangle>
+
+      <textField>
+        <reportElement x="15" y="10" width="310" height="20" forecolor="#1E293B" />
+        <textElement>
+          <font fontName="DejaVu Sans" size="14" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{institutionName} != null ? $P{institutionName} : "Établissement Scolaire"]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="15" y="32" width="310" height="15" forecolor="#64748B" />
+        <textElement>
+          <font fontName="DejaVu Sans" size="9"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{institutionType} != null ? $P{institutionType} : "Enseignement Général & Technique"]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="15" y="48" width="310" height="20" forecolor="#64748B" />
+        <textElement>
+          <font fontName="DejaVu Sans" size="7.5"/>
+        </textElement>
+        <textFieldExpression><![CDATA[($P{institutionAddress} != null ? $P{institutionAddress} : "") + " | Tél: " + ($P{institutionPhone} != null ? $P{institutionPhone} : "")]]></textFieldExpression>
+      </textField>
+
+      <!-- BADGE TITRE RAPPORT -->
+      <rectangle>
+        <reportElement x="330" y="12" width="195" height="50" backcolor="#1E293B" />
+        <graphicElement>
+          <pen lineWidth="0"/>
+        </graphicElement>
+      </rectangle>
+
+      <staticText>
+        <reportElement x="330" y="18" width="195" height="20" forecolor="#FFFFFF" />
+        <textElement textAlignment="Center">
+          <font fontName="DejaVu Sans" size="11" isBold="true"/>
+        </textElement>
+        <text><![CDATA[FEUILLE DE PRÉSENCE]]></text>
+      </staticText>
+
+      <staticText>
+        <reportElement x="330" y="38" width="195" height="18" forecolor="#94A3B8" />
+        <textElement textAlignment="Center">
+          <font fontName="DejaVu Sans" size="8.5"/>
+        </textElement>
+        <text><![CDATA[APPEL JOURNALIER]]></text>
+      </staticText>
+
+      <!-- INFORMATIONS CLASSE ET DATE -->
+      <rectangle>
+        <reportElement x="0" y="88" width="535" height="42" backcolor="#EFF6FF" />
+        <graphicElement>
+          <pen lineWidth="0.5" lineColor="#BFDBFE"/>
+        </graphicElement>
+      </rectangle>
+
+      <textField>
+        <reportElement x="15" y="100" width="250" height="18" forecolor="#1E3A8A" />
+        <textElement verticalAlignment="Middle">
+          <font fontName="DejaVu Sans" size="11" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["CLASSE : " + ($P{classroomName} != null ? $P{classroomName} : "-")]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="270" y="100" width="250" height="18" forecolor="#1E3A8A" />
+        <textElement textAlignment="Right" verticalAlignment="Middle">
+          <font fontName="DejaVu Sans" size="11" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["DATE : " + ($P{attendanceDate} != null ? $P{attendanceDate} : "-")]]></textFieldExpression>
+      </textField>
+    </band>
+  </title>
+
+  <columnHeader>
+    <band height="25">
+      <rectangle>
+        <reportElement x="0" y="0" width="535" height="25" backcolor="#1E293B" />
+        <graphicElement>
+          <pen lineWidth="0"/>
+        </graphicElement>
+      </rectangle>
+
+      <staticText>
+        <reportElement x="5" y="5" width="30" height="15" forecolor="#FFFFFF" />
+        <textElement verticalAlignment="Middle">
+          <font fontName="DejaVu Sans" size="9" isBold="true"/>
+        </textElement>
+        <text><![CDATA[N°]]></text>
+      </staticText>
+
+      <staticText>
+        <reportElement x="35" y="5" width="95" height="15" forecolor="#FFFFFF" />
+        <textElement verticalAlignment="Middle">
+          <font fontName="DejaVu Sans" size="9" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Matricule]]></text>
+      </staticText>
+
+      <staticText>
+        <reportElement x="130" y="5" width="190" height="15" forecolor="#FFFFFF" />
+        <textElement verticalAlignment="Middle">
+          <font fontName="DejaVu Sans" size="9" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Nom & Prénoms]]></text>
+      </staticText>
+
+      <staticText>
+        <reportElement x="320" y="5" width="85" height="15" forecolor="#FFFFFF" />
+        <textElement verticalAlignment="Middle">
+          <font fontName="DejaVu Sans" size="9" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Statut]]></text>
+      </staticText>
+
+      <staticText>
+        <reportElement x="405" y="5" width="125" height="15" forecolor="#FFFFFF" />
+        <textElement verticalAlignment="Middle">
+          <font fontName="DejaVu Sans" size="9" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Observation / Sign.]]></text>
+      </staticText>
+    </band>
+  </columnHeader>
+
+  <detail>
+    <band height="22">
+      <rectangle>
+        <reportElement x="0" y="0" width="535" height="22" backcolor="#FFFFFF" />
+        <graphicElement>
+          <pen lineWidth="0.5" lineColor="#E2E8F0"/>
+        </graphicElement>
+      </rectangle>
+
+      <textField>
+        <reportElement x="5" y="4" width="30" height="14" forecolor="#64748B" />
+        <textElement verticalAlignment="Middle">
+          <font fontName="DejaVu Sans" size="8.5"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$V{REPORT_COUNT}]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="35" y="4" width="95" height="14" forecolor="#475569" />
+        <textElement verticalAlignment="Middle">
+          <font fontName="DejaVu Sans" size="8.5"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{registrationNumber} != null ? $F{registrationNumber} : "-"]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="130" y="4" width="190" height="14" forecolor="#1E293B" />
+        <textElement verticalAlignment="Middle">
+          <font fontName="DejaVu Sans" size="8.5" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{fullName} != null ? $F{fullName} : ""]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="320" y="4" width="85" height="14" forecolor="#1E293B" />
+        <textElement verticalAlignment="Middle">
+          <font fontName="DejaVu Sans" size="8.5"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{status} != null ? $F{status} : "."]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="405" y="4" width="125" height="14" forecolor="#64748B" />
+        <textElement verticalAlignment="Middle">
+          <font fontName="DejaVu Sans" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$F{remarks} != null ? $F{remarks} : ""]]></textFieldExpression>
+      </textField>
+    </band>
+  </detail>
+
+  <pageFooter>
+    <band height="35">
+      <line>
+        <reportElement x="0" y="5" width="535" height="1" forecolor="#CBD5E1"/>
+      </line>
+      <textField>
+        <reportElement x="0" y="12" width="350" height="15" forecolor="#94A3B8" />
+        <textElement>
+          <font fontName="DejaVu Sans" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["Généré le : " + ($P{generatedDate} != null ? $P{generatedDate} : "") + " | School Manager ERP"]]></textFieldExpression>
+      </textField>
+      <textField>
+        <reportElement x="435" y="12" width="100" height="15" forecolor="#94A3B8" />
+        <textElement textAlignment="Right">
+          <font fontName="DejaVu Sans" size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["Page " + $V{PAGE_NUMBER}]]></textFieldExpression>
+      </textField>
+    </band>
+  </pageFooter>
+
+  <summary>
+    <band height="85">
+      <!-- SIGNATURE BLOCK -->
+      <staticText>
+        <reportElement x="280" y="15" width="245" height="15" forecolor="#334155" />
+        <textElement textAlignment="Right">
+          <font fontName="DejaVu Sans" size="9" isBold="true"/>
+        </textElement>
+        <text><![CDATA[Le Professeur / Surveillant Responsable :]]></text>
+      </staticText>
+
+      <staticText>
+        <reportElement x="280" y="45" width="245" height="30" forecolor="#94A3B8" />
+        <textElement textAlignment="Right">
+          <font fontName="DejaVu Sans" size="9"/>
+        </textElement>
+        <text><![CDATA[Signature & Cachet :
+
+
+___________________________________]]></text>
+      </staticText>
+    </band>
+  </summary>
+
+</jasperReport>

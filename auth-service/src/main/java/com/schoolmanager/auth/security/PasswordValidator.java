@@ -1,9 +1,11 @@
 package com.schoolmanager.auth.security;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import com.schoolmanager.auth.repository.GlobalSettingRepository;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -17,6 +19,9 @@ public class PasswordValidator {
 
     @Value("${app.services.system-config-url}")
     private String systemConfigUrl;
+
+    @Autowired
+    private GlobalSettingRepository globalSettingRepository;
 
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -46,6 +51,11 @@ public class PasswordValidator {
         boolean reqNumber = policy.passwordRequireNumber() != null ? policy.passwordRequireNumber() : true;
         boolean reqSpecial = policy.passwordRequireSpecial() != null ? policy.passwordRequireSpecial() : true;
 
+        // Si aucun critère de complexité n'est requis, laisser l'utilisateur écrire ce qu'il veut
+        if (!reqUpper && !reqLower && !reqNumber && !reqSpecial) {
+            return minLength <= 0 || password.length() >= minLength;
+        }
+
         StringBuilder regex = new StringBuilder("^");
 
         if (reqNumber) {
@@ -67,19 +77,37 @@ public class PasswordValidator {
             return Pattern.compile(regex.toString()).matcher(password).matches();
         } catch (Exception e) {
             log.error("Erreur lors de la validation regex du mot de passe : {}", e.getMessage());
-            return password.length() >= 8; // Fallback simple de sécurité
+            return password.length() >= minLength; // Fallback simple de sécurité
         }
     }
 
     private PasswordPolicyDto getPolicy(UUID tenantId) {
+        UUID globalSettingsId = UUID.fromString("00000000-0000-0000-0000-000000000001");
         if (tenantId == null) {
-            return new PasswordPolicyDto(8, true, true, true, true);
+            return getGlobalPolicy(globalSettingsId);
         }
         try {
             String url = systemConfigUrl + "/api/v1/system/settings/tenant/" + tenantId + "/password-policy";
             return restTemplate.getForObject(url, PasswordPolicyDto.class);
         } catch (Exception e) {
-            log.warn("Impossible de récupérer la politique de mot de passe pour le tenant {} : {}. Fallback sur la politique par défaut.", tenantId, e.getMessage());
+            log.warn("Impossible de récupérer la politique de mot de passe pour le tenant {} : {}. Fallback sur la politique globale.", tenantId, e.getMessage());
+            return getGlobalPolicy(globalSettingsId);
+        }
+    }
+
+    private PasswordPolicyDto getGlobalPolicy(UUID id) {
+        try {
+            return globalSettingRepository.findById(id)
+                    .map(g -> new PasswordPolicyDto(
+                            g.getPasswordMinLength(),
+                            g.isPasswordRequireUppercase(),
+                            g.isPasswordRequireLowercase(),
+                            g.isPasswordRequireNumber(),
+                            g.isPasswordRequireSpecial()
+                    ))
+                    .orElse(new PasswordPolicyDto(8, true, true, true, true));
+        } catch (Exception e) {
+            log.error("Erreur lors de la lecture de la politique globale en BDD : {}", e.getMessage());
             return new PasswordPolicyDto(8, true, true, true, true);
         }
     }

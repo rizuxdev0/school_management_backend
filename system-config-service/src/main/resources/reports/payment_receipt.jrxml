@@ -29,6 +29,8 @@
   <parameter name="totalExigible" class="java.lang.String" />
   <parameter name="totalPaid" class="java.lang.String" />
   <parameter name="balance" class="java.lang.String" />
+  <parameter name="signatureBase64" class="java.lang.String" />
+  <parameter name="directorLabel" class="java.lang.String" />
 
   <field name="feeName" class="java.lang.String" />
   <field name="installment" class="java.lang.String" />
@@ -303,7 +305,7 @@
   </detail>
 
   <columnFooter>
-    <band height="210">
+    <band height="240">
       <line>
         <reportElement x="0" y="4" width="535" height="1" />
         <graphicElement>
@@ -409,26 +411,48 @@
         <!-- <textFieldExpression><![CDATA[$P{notes} != null &amp;&amp; !$P{notes}.isEmpty() ? "Note
         : " + $P{notes} : ""]]></textFieldExpression> -->
       </textField>
-      <staticText>
-        <reportElement x="370" y="165" width="165" height="13" />
+      <!-- Zone signature dynamique du directeur/responsable -->
+      <!-- Titre du signataire (dynamique si directorLabel fourni, sinon label par défaut) -->
+      <textField isBlankWhenNull="true">
+        <reportElement x="370" y="162" width="165" height="13" />
         <textElement textAlignment="Center" verticalAlignment="Middle">
           <font fontName="DejaVu Sans" size="8" isBold="true" />
         </textElement>
-        <text><![CDATA[Le Responsable Financier]]></text>
-      </staticText>
+        <textFieldExpression><![CDATA[$P{directorLabel} != null && !$P{directorLabel}.trim().isEmpty() ? $P{directorLabel} : "Le Responsable Financier"]]></textFieldExpression>
+      </textField>
+      <!-- Image de signature si elle est disponible -->
+      <image scaleImage="RetainShape" onErrorType="Blank">
+        <reportElement x="390" y="175" width="125" height="45"
+          isPrintWhenDetailOverflows="true">
+          <printWhenExpression><![CDATA[$P{signatureBase64} != null && !$P{signatureBase64}.trim().isEmpty()]]></printWhenExpression>
+        </reportElement>
+        <imageExpression><![CDATA[
+          ($P{signatureBase64} != null && !$P{signatureBase64}.trim().isEmpty())
+          ? javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(
+              java.util.Base64.getDecoder().decode(
+                $P{signatureBase64}.replaceAll("data:image/[a-z]+;base64,", "")
+              )
+            ))
+          : null
+        ]]></imageExpression>
+      </image>
+      <!-- Ligne de séparation sous la signature -->
       <line>
-        <reportElement x="370" y="185" width="165" height="1" />
+        <reportElement x="370" y="222" width="165" height="1" />
         <graphicElement>
           <pen lineWidth="0.5" lineColor="#999999" />
         </graphicElement>
       </line>
-      <staticText>
-        <reportElement x="370" y="188" width="165" height="12" />
+      <!-- Texte sous la ligne : "Signature et Cachet" si pas d'image, sinon rien -->
+      <textField isBlankWhenNull="true">
+        <reportElement x="370" y="224" width="165" height="12">
+          <printWhenExpression><![CDATA[$P{signatureBase64} == null || $P{signatureBase64}.trim().isEmpty()]]></printWhenExpression>
+        </reportElement>
         <textElement textAlignment="Center" verticalAlignment="Middle">
           <font fontName="DejaVu Sans" size="7" isItalic="true" />
         </textElement>
-        <text><![CDATA[Signature et Cachet]]></text>
-      </staticText>
+        <textFieldExpression><![CDATA["Signature et Cachet"]]></textFieldExpression>
+      </textField>
     </band>
   </columnFooter>
 

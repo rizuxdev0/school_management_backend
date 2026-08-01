@@ -27,6 +27,11 @@ public class GlobalSettingController {
                             .maintenanceMode(false)
                             .announcementText(null)
                             .announcementEnd(null)
+                            .passwordMinLength(8)
+                            .passwordRequireUppercase(true)
+                            .passwordRequireLowercase(true)
+                            .passwordRequireNumber(true)
+                            .passwordRequireSpecial(true)
                             .build();
                     return globalSettingRepository.save(newSetting);
                 });
@@ -42,6 +47,11 @@ public class GlobalSettingController {
         setting.setMaintenanceMode(updated.isMaintenanceMode());
         setting.setAnnouncementText(updated.getAnnouncementText());
         setting.setAnnouncementEnd(updated.getAnnouncementEnd());
+        setting.setPasswordMinLength(updated.getPasswordMinLength());
+        setting.setPasswordRequireUppercase(updated.isPasswordRequireUppercase());
+        setting.setPasswordRequireLowercase(updated.isPasswordRequireLowercase());
+        setting.setPasswordRequireNumber(updated.isPasswordRequireNumber());
+        setting.setPasswordRequireSpecial(updated.isPasswordRequireSpecial());
         
         return ResponseEntity.ok(globalSettingRepository.save(setting));
     }

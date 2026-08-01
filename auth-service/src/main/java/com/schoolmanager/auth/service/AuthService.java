@@ -145,7 +145,10 @@ public class AuthService {
                 enabledModules,
                 roles,
                 permissions,
-                Boolean.TRUE.equals(user.getIsSuperAdmin()));
+                Boolean.TRUE.equals(user.getIsSuperAdmin()),
+                user.getEmail(),
+                user.getPhoneNumber(),
+                user.getId());
 
         Integer maxStudents = 999999;
         Integer maxStaff = 999999;
@@ -189,6 +192,12 @@ public class AuthService {
                 .maxBooks(maxBooks)
                 .logoUrl(tenant != null ? tenant.getLogoUrl() : null)
                 .primaryColor(tenant != null ? tenant.getPrimaryColor() : null)
+                .institutionType(tenant != null ? tenant.getInstitutionType() : null)
+                .systemPreset(tenant != null ? tenant.getSystemPreset() : null)
+                .currencyCode(tenant != null ? tenant.getCurrencyCode() : null)
+                .currencySymbol(tenant != null ? tenant.getCurrencySymbol() : null)
+                .currencyNameFr(tenant != null ? tenant.getCurrencyNameFr() : null)
+                .defaultLanguage(tenant != null ? tenant.getDefaultLanguage() : null)
                 .build();
     }
 
@@ -224,6 +233,12 @@ public class AuthService {
                 .maxClassrooms(plan.getMaxClassrooms())
                 .maxBooks(plan.getMaxBooks())
                 .subscriptionExpiresAt(java.time.ZonedDateTime.now().plusYears(1))
+                .institutionType(dto.getInstitutionType() != null ? dto.getInstitutionType() : "PRIVATE")
+                .systemPreset(dto.getSystemPreset() != null ? dto.getSystemPreset() : "FRENCH")
+                .currencyCode(dto.getCurrencyCode() != null ? dto.getCurrencyCode() : "XOF")
+                .currencySymbol(dto.getCurrencySymbol() != null ? dto.getCurrencySymbol() : "FCFA")
+                .currencyNameFr(dto.getCurrencyNameFr() != null ? dto.getCurrencyNameFr() : "Franc CFA")
+                .defaultLanguage(dto.getDefaultLanguage() != null ? dto.getDefaultLanguage() : "fr")
                 .build();
 
         final Tenant savedTenant = tenantRepository.save(tenant);

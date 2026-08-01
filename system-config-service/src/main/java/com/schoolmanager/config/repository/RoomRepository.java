@@ -10,4 +10,6 @@ import java.util.UUID;
 public interface RoomRepository extends JpaRepository<Room, UUID> {
     List<Room> findByTenantId(UUID tenantId);
     List<Room> findByTenantIdAndIsActiveTrue(UUID tenantId);
+    boolean existsByTenantIdAndCodeIgnoreCase(UUID tenantId, String code);
 }
+

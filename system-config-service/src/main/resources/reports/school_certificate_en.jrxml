@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+  name="school_certificate_en"
+  pageWidth="595" pageHeight="842" orientation="Portrait"
+  columnWidth="495" leftMargin="50" rightMargin="50" topMargin="40" bottomMargin="40"
+  whenNoDataType="AllSectionsNoDetail">
+
+  <parameter name="institutionName" class="java.lang.String" />
+  <parameter name="institutionType" class="java.lang.String" />
+  <parameter name="institutionAddress" class="java.lang.String" />
+  <parameter name="institutionPhone" class="java.lang.String" />
+  <parameter name="institutionEmail" class="java.lang.String" />
+  <parameter name="motto" class="java.lang.String" />
+  <parameter name="studentName" class="java.lang.String" />
+  <parameter name="studentDob" class="java.lang.String" />
+  <parameter name="registrationNumber" class="java.lang.String" />
+  <parameter name="classroomName" class="java.lang.String" />
+  <parameter name="academicYear" class="java.lang.String" />
+  <parameter name="currentDate" class="java.lang.String" />
+  <parameter name="signatory" class="java.lang.String" />
+  <parameter name="signatureBase64" class="java.lang.String" />
+
+  <title>
+    <band height="700">
+      <!-- FILIGRANE DE FOND (DECORATIVE BORDER) -->
+      <rectangle>
+        <reportElement x="0" y="0" width="495" height="700" forecolor="#6366F1" />
+        <graphicElement>
+          <pen lineWidth="1.5" lineStyle="Solid"/>
+        </graphicElement>
+      </rectangle>
+      
+      <rectangle>
+        <reportElement x="5" y="5" width="485" height="690" forecolor="#E2E8F0" />
+        <graphicElement>
+          <pen lineWidth="0.5" lineStyle="Double"/>
+        </graphicElement>
+      </rectangle>
+
+      <!-- ENTÊTE DE L'ÉTABLISSEMENT -->
+      <textField>
+        <reportElement x="25" y="25" width="445" height="25" forecolor="#1E3A8A" />
+        <textElement textAlignment="Center">
+          <font size="16" isBold="true" pdfFontName="Helvetica-Bold"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{institutionName}.toUpperCase()]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="25" y="50" width="445" height="15" forecolor="#475569" />
+        <textElement textAlignment="Center">
+          <font size="9" isItalic="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{motto} != null && !$P{motto}.isEmpty() ? "\"" + $P{motto} + "\"" : ""]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="25" y="65" width="445" height="15" forecolor="#64748B" />
+        <textElement textAlignment="Center">
+          <font size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{institutionType}]]></textFieldExpression>
+      </textField>
+
+      <line>
+        <reportElement x="150" y="90" width="195" height="1" forecolor="#E2E8F0"/>
+      </line>
+
+      <!-- TITRE DU DOCUMENT -->
+      <staticText>
+        <reportElement x="25" y="120" width="445" height="35" forecolor="#1E293B" />
+        <textElement textAlignment="Center" verticalAlignment="Middle">
+          <font size="20" isBold="true" isUnderline="false" pdfFontName="Helvetica-Bold"/>
+        </textElement>
+        <text><![CDATA[CERTIFICATE OF ENROLLMENT]]></text>
+      </staticText>
+
+      <textField>
+        <reportElement x="25" y="160" width="445" height="20" forecolor="#6366F1" />
+        <textElement textAlignment="Center">
+          <font size="11" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["Academic Year: " + $P{academicYear}]]></textFieldExpression>
+      </textField>
+
+      <!-- CORPS DU TEXTE -->
+      <staticText>
+        <reportElement x="40" y="220" width="415" height="25" forecolor="#334155" />
+        <textElement textAlignment="Justified" verticalAlignment="Middle">
+          <font size="12" isBold="false"/>
+        </textElement>
+        <text><![CDATA[I, the undersigned school administrator, hereby certify that:]]></text>
+      </staticText>
+
+      <!-- INFO ELEVE -->
+      <staticText>
+        <reportElement x="40" y="270" width="140" height="20" forecolor="#475569" />
+        <textElement>
+          <font size="12" isBold="true" pdfFontName="Helvetica-Bold"/>
+        </textElement>
+        <text><![CDATA[Student (Full Name):]]></text>
+      </staticText>
+
+      <textField>
+        <reportElement x="190" y="270" width="265" height="20" forecolor="#1E293B" />
+        <textElement>
+          <font size="12" isBold="true" pdfFontName="Helvetica-Bold"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{studentName}]]></textFieldExpression>
+      </textField>
+
+      <staticText>
+        <reportElement x="40" y="300" width="140" height="20" forecolor="#475569" />
+        <textElement>
+          <font size="12" isBold="true" pdfFontName="Helvetica-Bold"/>
+        </textElement>
+        <text><![CDATA[Date of Birth:]]></text>
+      </staticText>
+
+      <textField>
+        <reportElement x="190" y="300" width="265" height="20" forecolor="#1E293B" />
+        <textElement>
+          <font size="12"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{studentDob}]]></textFieldExpression>
+      </textField>
+
+      <staticText>
+        <reportElement x="40" y="330" width="140" height="20" forecolor="#475569" />
+        <textElement>
+          <font size="12" isBold="true" pdfFontName="Helvetica-Bold"/>
+        </textElement>
+        <text><![CDATA[Student ID / Reg No:]]></text>
+      </staticText>
+
+      <textField>
+        <reportElement x="190" y="330" width="265" height="20" forecolor="#1E293B" />
+        <textElement>
+          <font size="12"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{registrationNumber}]]></textFieldExpression>
+      </textField>
+
+      <staticText>
+        <reportElement x="40" y="360" width="140" height="20" forecolor="#475569" />
+        <textElement>
+          <font size="12" isBold="true" pdfFontName="Helvetica-Bold"/>
+        </textElement>
+        <text><![CDATA[Classroom / Grade:]]></text>
+      </staticText>
+
+      <textField>
+        <reportElement x="190" y="360" width="265" height="20" forecolor="#1E293B" />
+        <textElement>
+          <font size="12" isBold="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{classroomName}]]></textFieldExpression>
+      </textField>
+
+      <!-- CONCLUSION -->
+      <textField>
+        <reportElement x="40" y="410" width="415" height="60" forecolor="#334155" />
+        <textElement textAlignment="Justified" lineSpacing="1_1_2">
+          <font size="12"/>
+        </textElement>
+        <textFieldExpression><![CDATA["Is regularly enrolled in our institution for the academic year " + $P{academicYear} + " and is actively attending all classes."]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="40" y="475" width="415" height="35" forecolor="#334155" />
+        <textElement textAlignment="Justified">
+          <font size="12"/>
+        </textElement>
+        <textFieldExpression><![CDATA["In witness whereof, this certificate is issued to serve where necessary."]]></textFieldExpression>
+      </textField>
+
+      <!-- DATE & SIGNATURE -->
+      <textField>
+        <reportElement x="230" y="540" width="225" height="20" forecolor="#475569" />
+        <textElement textAlignment="Right">
+          <font size="11" isItalic="true"/>
+        </textElement>
+        <textFieldExpression><![CDATA["Given on " + $P{currentDate}]]></textFieldExpression>
+      </textField>
+
+      <textField>
+        <reportElement x="230" y="575" width="225" height="20" forecolor="#1E293B" />
+        <textElement textAlignment="Right">
+          <font size="12" isBold="true" pdfFontName="Helvetica-Bold"/>
+        </textElement>
+        <textFieldExpression><![CDATA[$P{signatory}]]></textFieldExpression>
+      </textField>
+
+      <!-- SIGNATURE IMAGE (shown if signatureBase64 provided, otherwise static text) -->
+      <image scaleImage="RetainShape" onErrorType="Blank" hAlign="Right">
+        <reportElement x="230" y="595" width="225" height="50" forecolor="#64748B">
+          <printWhenExpression><![CDATA[$P{signatureBase64} != null && !$P{signatureBase64}.trim().isEmpty()]]></printWhenExpression>
+        </reportElement>
+        <imageExpression><![CDATA[
+          ($P{signatureBase64} != null && !$P{signatureBase64}.trim().isEmpty())
+          ? javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(
+              java.util.Base64.getDecoder().decode(
+                $P{signatureBase64}.contains(",") ? $P{signatureBase64}.split(",")[1] : $P{signatureBase64}
+              )))
+          : null
+        ]]></imageExpression>
+      </image>
+      <staticText>
+        <reportElement x="230" y="645" width="225" height="16" forecolor="#64748B">
+          <printWhenExpression><![CDATA[$P{signatureBase64} == null || $P{signatureBase64}.trim().isEmpty()]]></printWhenExpression>
+        </reportElement>
+        <textElement textAlignment="Right">
+          <font size="9" isItalic="true"/>
+        </textElement>
+        <text><![CDATA[Official Seal & Signature]]></text>
+      </staticText>
+
+      <!-- BAS DE PAGE CONTACT -->
+      <textField>
+        <reportElement x="25" y="660" width="445" height="12" forecolor="#94A3B8" />
+        <textElement textAlignment="Center">
+          <font size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["Address: " + ($P{institutionAddress} != null ? $P{institutionAddress} : "") + " | Phone: " + ($P{institutionPhone} != null ? $P{institutionPhone} : "")]]></textFieldExpression>
+      </textField>
+      
+      <textField>
+        <reportElement x="25" y="672" width="445" height="12" forecolor="#94A3B8" />
+        <textElement textAlignment="Center">
+          <font size="8"/>
+        </textElement>
+        <textFieldExpression><![CDATA["Email: " + ($P{institutionEmail} != null ? $P{institutionEmail} : "")]]></textFieldExpression>
+      </textField>
+    </band>
+  </title>
+</jasperReport>

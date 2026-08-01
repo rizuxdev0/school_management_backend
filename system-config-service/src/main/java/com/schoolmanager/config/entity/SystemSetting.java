@@ -48,6 +48,22 @@ public class SystemSetting {
     @Column(name = "logo_base64", columnDefinition = "TEXT")
     private String logoBase64;
 
+    /**
+     * Signature numérique ou cachet du directeur de l'établissement en Base64.
+     * Utilisé pour la signature automatique sur les bulletins et documents officiels.
+     * Format : "data:image/png;base64,iVBORw0KGgo..."
+     */
+    @Column(name = "principal_signature_base64", columnDefinition = "TEXT")
+    private String principalSignatureBase64;
+
+    /**
+     * Nom complet du directeur ou responsable signataire des documents officiels.
+     * Affiché sous la signature sur les bulletins, reçus et certificats.
+     * Exemple : "Dr. Jean DUPONT", "M. Kodjo MENSAH"
+     */
+    @Column(name = "director_name", length = 150)
+    private String directorName;
+
     // ==================== COORDONNÉES ====================
 
     /** Adresse postale complète de l'établissement (ex: "12 rue des Acacias, Abidjan"). */

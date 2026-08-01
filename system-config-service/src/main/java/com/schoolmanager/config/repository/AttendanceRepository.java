@@ -11,6 +11,7 @@ import java.util.UUID;
 @Repository
 public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     List<Attendance> findByClassroomIdAndAttendanceDate(UUID classroomId, LocalDate attendanceDate);
+    List<Attendance> findByClassroomIdAndAttendanceDateBetween(UUID classroomId, LocalDate startDate, LocalDate endDate);
     List<Attendance> findByStudentId(UUID studentId);
     Optional<Attendance> findByStudentIdAndAttendanceDate(UUID studentId, LocalDate attendanceDate);
 }

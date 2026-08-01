@@ -10,4 +10,6 @@ import java.util.UUID;
 public interface ClassroomRepository extends JpaRepository<Classroom, UUID> {
     List<Classroom> findByTenantId(UUID tenantId);
     List<Classroom> findByTenantIdAndAcademicLevelId(UUID tenantId, UUID academicLevelId);
+    boolean existsByTenantIdAndCodeIgnoreCase(UUID tenantId, String code);
 }
+
