@@ -37,11 +37,11 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     @Query("""
         SELECT a FROM AuditLog a
         WHERE a.tenantId = :tenantId
-          AND (cast(:action as String) IS NULL OR a.action = cast(:action as String))
-          AND (cast(:entityType as String) IS NULL OR a.entityType = cast(:entityType as String))
-          AND (cast(:username as String) IS NULL OR LOWER(a.username) LIKE LOWER(CONCAT('%', cast(:username as String), '%')))
-          AND (cast(:dateFrom as Instant) IS NULL OR a.timestamp >= :dateFrom)
-          AND (cast(:dateTo as Instant) IS NULL OR a.timestamp <= :dateTo)
+          AND (:action IS NULL OR :action = '' OR a.action = :action)
+          AND (:entityType IS NULL OR :entityType = '' OR a.entityType = :entityType)
+          AND (:username IS NULL OR :username = '' OR LOWER(a.username) LIKE LOWER(CONCAT('%', :username, '%')))
+          AND (cast(:dateFrom as ZonedDateTime) IS NULL OR a.timestamp >= :dateFrom)
+          AND (cast(:dateTo as ZonedDateTime) IS NULL OR a.timestamp <= :dateTo)
         ORDER BY a.timestamp DESC
     """)
     Page<AuditLog> searchLogs(
@@ -61,11 +61,11 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     @Query("""
         SELECT a FROM AuditLog a
         WHERE a.tenantId = :tenantId
-          AND (cast(:action as String) IS NULL OR a.action = cast(:action as String))
-          AND (cast(:entityType as String) IS NULL OR a.entityType = cast(:entityType as String))
-          AND (cast(:username as String) IS NULL OR LOWER(a.username) LIKE LOWER(CONCAT('%', cast(:username as String), '%')))
-          AND (cast(:dateFrom as Instant) IS NULL OR a.timestamp >= :dateFrom)
-          AND (cast(:dateTo as Instant) IS NULL OR a.timestamp <= :dateTo)
+          AND (:action IS NULL OR :action = '' OR a.action = :action)
+          AND (:entityType IS NULL OR :entityType = '' OR a.entityType = :entityType)
+          AND (:username IS NULL OR :username = '' OR LOWER(a.username) LIKE LOWER(CONCAT('%', :username, '%')))
+          AND (cast(:dateFrom as ZonedDateTime) IS NULL OR a.timestamp >= :dateFrom)
+          AND (cast(:dateTo as ZonedDateTime) IS NULL OR a.timestamp <= :dateTo)
         ORDER BY a.timestamp DESC
     """)
     List<AuditLog> searchLogsForExport(
