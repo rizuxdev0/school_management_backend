@@ -41,6 +41,7 @@ public class EvaluationAndGradesController {
 
     private final com.schoolmanager.config.service.BulletinCalculationService bulletinCalculationService;
     private final com.schoolmanager.config.service.NotificationService notificationService;
+    private final com.schoolmanager.config.service.AuditLogService auditLogService;
 
     // ==================== 1. MATIÈRES / SUBJECTS ====================
 
@@ -133,16 +134,34 @@ public class EvaluationAndGradesController {
                 grade.setEvaluation(eval);
             }
 
+            Student s = grade.getStudent();
+            Evaluation eval = grade.getEvaluation();
+
             Optional<StudentGrade> existing = studentGradeRepository.findByStudentIdAndEvaluationId(
-                    grade.getStudent().getId(),
-                    grade.getEvaluation().getId()
+                    s.getId(),
+                    eval.getId()
             );
             StudentGrade savedGrade;
             if (existing.isPresent()) {
                 StudentGrade e = existing.get();
-                e.setScore(grade.getScore());
+                BigDecimal oldScore = e.getScore();
+                BigDecimal newScore = grade.getScore();
+                e.setScore(newScore);
                 e.setRemarks(grade.getRemarks());
                 savedGrade = studentGradeRepository.save(e);
+
+                if (oldScore == null || oldScore.compareTo(newScore) != 0) {
+                    try {
+                        String studentName = s != null ? (s.getLastName() + " " + s.getFirstName()) : "";
+                        String subjectName = eval != null && eval.getSubject() != null ? eval.getSubject().getNameFr() : "Inconnue";
+                        auditLogService.log("UPDATE", "StudentGrade", savedGrade.getId().toString(),
+                            String.format("Note de l'élève %s modifiée en %s : de %s à %s sur %s",
+                                studentName, subjectName, oldScore != null ? oldScore.toString() : "N/A", newScore.toString(),
+                                eval != null && eval.getMaxScore() != null ? eval.getMaxScore().toString() : "20"));
+                    } catch (Exception ex) {
+                        // ignore logger exceptions to ensure grades save transaction is not aborted
+                    }
+                }
             } else {
                 savedGrade = studentGradeRepository.save(grade);
             }
@@ -151,8 +170,6 @@ public class EvaluationAndGradesController {
             // Déclencher une notification de publication de note
             try {
                 UUID tenantId = savedGrade.getTenantId();
-                Student s = savedGrade.getStudent();
-                Evaluation eval = savedGrade.getEvaluation();
                 String subjectName = eval.getSubject() != null ? eval.getSubject().getNameFr() : "une matière";
                 String title = "Nouvelle note disponible";
                 String message = String.format("La note de %s %s pour l'évaluation '%s' en %s a été publiée : %s/%s.",

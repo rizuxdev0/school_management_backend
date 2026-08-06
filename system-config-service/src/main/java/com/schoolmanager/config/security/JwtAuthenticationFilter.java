@@ -126,6 +126,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     authorities.add(new SimpleGrantedAuthority("EXAMS_EDIT"));
                     authorities.add(new SimpleGrantedAuthority("LIBRARY_VIEW"));
                     authorities.add(new SimpleGrantedAuthority("LIBRARY_EDIT"));
+                    authorities.add(new SimpleGrantedAuthority("TRANSPORT_VIEW"));
+                    authorities.add(new SimpleGrantedAuthority("TRANSPORT_EDIT"));
+                    authorities.add(new SimpleGrantedAuthority("CATERING_VIEW"));
+                    authorities.add(new SimpleGrantedAuthority("CATERING_EDIT"));
+                    authorities.add(new SimpleGrantedAuthority("MESSAGING_VIEW"));
+                    authorities.add(new SimpleGrantedAuthority("MESSAGING_EDIT"));
+                    authorities.add(new SimpleGrantedAuthority("EXTRACURRICULAR_VIEW"));
+                    authorities.add(new SimpleGrantedAuthority("EXTRACURRICULAR_EDIT"));
                 }
                 if (roles != null) {
                     roles.forEach(role -> authorities.add(new SimpleGrantedAuthority("ROLE_" + role)));

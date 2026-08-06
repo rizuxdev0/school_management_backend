@@ -355,6 +355,9 @@ public class AcademicReportService {
             params.put("institutionPhone", nullSafe(setting.getPhone(), ""));
             params.put("institutionEmail", nullSafe(setting.getContactEmail(), ""));
             params.put("motto", nullSafe(setting.getMotto(), ""));
+            // Normalisation de base64 si présent
+            String rawLogo = setting.getLogoBase64();
+            params.put("logoBase64", (rawLogo != null && !rawLogo.isBlank()) ? rawLogo : "");
         } else {
             params.put("institutionName", "Établissement Scolaire");
             params.put("institutionType", "Enseignement Général & Technique");
@@ -362,6 +365,7 @@ public class AcademicReportService {
             params.put("institutionPhone", "");
             params.put("institutionEmail", "");
             params.put("motto", "");
+            params.put("logoBase64", "");
         }
         params.put("generatedDate", ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
         return params;

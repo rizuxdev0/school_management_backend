@@ -329,9 +329,11 @@ public class AttendanceAndFinanceController {
     @PostMapping("/payments")
     @PreAuthorize("hasAuthority('FINANCE_EDIT')")
     public ResponseEntity<StudentPayment> savePayment(@RequestBody StudentPayment payment) {
-        if (!SecurityUtils.isSuperAdmin()) {
-            payment.setTenantId(SecurityUtils.getCurrentTenantId());
+        UUID tenantId = SecurityUtils.isSuperAdmin() ? payment.getTenantId() : SecurityUtils.getCurrentTenantId();
+        if (tenantId == null) {
+            tenantId = UUID.fromString("00000000-0000-0000-0000-000000000000");
         }
+        payment.setTenantId(tenantId);
 
         // Resolve transient Student entity to prevent TransientPropertyValueException
         if (payment.getStudent() != null && payment.getStudent().getId() != null) {
@@ -339,6 +341,59 @@ public class AttendanceAndFinanceController {
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable"));
             SecurityUtils.assertOwnership(s.getTenantId());
             payment.setStudent(s);
+        }
+
+        // Intégrité Financière : Validation du montant payé par rapport au solde restant
+        if (payment.getStudent() != null && payment.getStudent().getId() != null && payment.getAcademicYearId() != null) {
+            UUID studentId = payment.getStudent().getId();
+            UUID yearId = payment.getAcademicYearId();
+
+            Optional<StudentEnrollment> enrollmentOpt = studentEnrollmentRepository.findByStudentIdAndAcademicYearId(studentId, yearId);
+            if (enrollmentOpt.isPresent()) {
+                StudentEnrollment enrollment = enrollmentOpt.get();
+                if (enrollment.getClassroom() != null && enrollment.getClassroom().getAcademicLevel() != null) {
+                    UUID levelId = enrollment.getClassroom().getAcademicLevel().getId();
+
+                    // 1. Calcul du total des frais exigibles pour ce niveau et cette année
+                    List<TuitionFee> fees = tuitionFeeRepository.findByAcademicLevelIdAndAcademicYearId(levelId, yearId);
+                    BigDecimal totalGrossExigible = fees.stream()
+                            .map(TuitionFee::getAmount)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                    // 2. Déduction des bourses d'études
+                    List<StudentScholarship> scholarships = studentScholarshipRepository.findByStudentIdAndAcademicYearId(studentId, yearId);
+                    BigDecimal totalScholarshipDiscount = BigDecimal.ZERO;
+                    for (StudentScholarship sch : scholarships) {
+                        if ("PERCENTAGE".equalsIgnoreCase(sch.getDiscountType())) {
+                            BigDecimal disc = totalGrossExigible.multiply(sch.getDiscountValue())
+                                    .divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
+                            totalScholarshipDiscount = totalScholarshipDiscount.add(disc);
+                        } else {
+                            totalScholarshipDiscount = totalScholarshipDiscount.add(sch.getDiscountValue());
+                        }
+                    }
+                    if (totalScholarshipDiscount.compareTo(totalGrossExigible) > 0) {
+                        totalScholarshipDiscount = totalGrossExigible;
+                    }
+                    BigDecimal totalExigible = totalGrossExigible.subtract(totalScholarshipDiscount);
+
+                    // 3. Somme des paiements déjà effectués (en excluant le paiement actuel en cas de mise à jour)
+                    List<StudentPayment> existingPayments = studentPaymentRepository.findByStudentIdAndAcademicYearId(studentId, yearId);
+                    BigDecimal totalPaid = existingPayments.stream()
+                            .filter(p -> payment.getId() == null || !p.getId().equals(payment.getId()))
+                            .map(StudentPayment::getAmountPaid)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                    BigDecimal remainingBalance = totalExigible.subtract(totalPaid);
+
+                    // Si le nouveau montant à payer dépasse le solde restant (avec tolérance sur les centimes)
+                    if (payment.getAmountPaid() != null && payment.getAmountPaid().compareTo(remainingBalance.add(BigDecimal.valueOf(0.01))) > 0) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                String.format("Le versement saisi (%s) dépasse le solde restant dû de l'élève qui est de %s pour cette année scolaire.",
+                                        payment.getAmountPaid(), remainingBalance));
+                    }
+                }
+            }
         }
 
         // Auto-generate receipt number if missing

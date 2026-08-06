@@ -207,9 +207,47 @@ public class StudentAcademicsController {
     @PostMapping("/timetable")
     @PreAuthorize("hasAuthority('ACADEMIC_EDIT')")
     public ResponseEntity<TimetableSlot> saveTimetableSlot(@RequestBody TimetableSlot slot) {
-        if (!SecurityUtils.isSuperAdmin()) {
-            slot.setTenantId(SecurityUtils.getCurrentTenantId());
+        UUID tenantId = SecurityUtils.isSuperAdmin() ? slot.getTenantId() : SecurityUtils.getCurrentTenantId();
+        if (tenantId == null) {
+            tenantId = UUID.fromString("00000000-0000-0000-0000-000000000000");
         }
+        slot.setTenantId(tenantId);
+
+        if (slot.getStartTime() == null || slot.getEndTime() == null || slot.getStartTime().compareTo(slot.getEndTime()) >= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "L'heure de début doit être antérieure à l'heure de fin.");
+        }
+
+        List<TimetableSlot> overlapping = timetableSlotRepository.findOverlappingSlots(
+                slot.getTenantId(),
+                slot.getAcademicYearId(),
+                slot.getDayOfWeek(),
+                slot.getStartTime(),
+                slot.getEndTime(),
+                slot.getId()
+        );
+
+        for (TimetableSlot match : overlapping) {
+            if (slot.getClassroomId().equals(match.getClassroomId())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    String.format("La classe a déjà un cours programmé (%s) de %s à %s.",
+                        match.getSubjectNameFr(), match.getStartTime(), match.getEndTime()));
+            }
+
+            if (slot.getTeacherName() != null && !slot.getTeacherName().trim().isEmpty() &&
+                match.getTeacherName() != null && slot.getTeacherName().equalsIgnoreCase(match.getTeacherName())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    String.format("L'enseignant %s est déjà programmé pour un cours de %s à %s.",
+                        slot.getTeacherName(), match.getStartTime(), match.getEndTime()));
+            }
+
+            if (slot.getRoom() != null && !slot.getRoom().trim().isEmpty() &&
+                match.getRoom() != null && slot.getRoom().equalsIgnoreCase(match.getRoom())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    String.format("La salle %s est déjà occupée de %s à %s par un autre cours.",
+                        slot.getRoom(), match.getStartTime(), match.getEndTime()));
+            }
+        }
+
         return ResponseEntity.ok(timetableSlotRepository.save(slot));
     }
 

@@ -73,4 +73,16 @@ public class Student {
     @Builder.Default
     @Column(name = "is_active")
     private Boolean isActive = true;
+
+    @Size(max = 250, message = "Les allergies ne doivent pas dépasser 250 caractères")
+    @Column(name = "allergies", length = 250)
+    private String allergies;
+
+    @Size(max = 150, message = "Le nom du contact d'urgence ne doit pas dépasser 150 caractères")
+    @Column(name = "emergency_contact_name", length = 150)
+    private String emergencyContactName;
+
+    @Size(max = 30, message = "Le téléphone du contact d'urgence ne doit pas dépasser 30 caractères")
+    @Column(name = "emergency_contact_phone", length = 30)
+    private String emergencyContactPhone;
 }

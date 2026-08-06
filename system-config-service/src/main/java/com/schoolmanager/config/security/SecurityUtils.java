@@ -40,6 +40,9 @@ public final class SecurityUtils {
     public static UUID getCurrentTenantId() {
         String raw = getCurrentPrincipal().getTenantId();
         if (raw == null || raw.isBlank()) {
+            if (isSuperAdmin()) {
+                return UUID.fromString("00000000-0000-0000-0000-000000000000");
+            }
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "tenantId absent du token");
         }
         try {
