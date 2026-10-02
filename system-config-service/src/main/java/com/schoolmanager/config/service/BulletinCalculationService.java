@@ -4,6 +4,7 @@ import com.schoolmanager.config.controller.EvaluationAndGradesController.Student
 import com.schoolmanager.config.controller.EvaluationAndGradesController.SubjectAverageDto;
 import com.schoolmanager.config.entity.*;
 import com.schoolmanager.config.repository.*;
+import com.schoolmanager.config.security.SecurityUtils;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,8 @@ import java.util.*;
  *  - Les moyennes pondérées par matière (normalisées sur 20)
  *  - La moyenne générale pondérée par les coefficients
  *  - Le rang dans la classe (trié par moyenne décroissante)
+ *  - Les statistiques globales de classe (moyenne de classe, min, max, effectif)
+ *  - La mention d'honneur ou appréciation personnalisable par l'établissement via HonorsAppreciationService
  */
 @Service
 @RequiredArgsConstructor
@@ -30,6 +33,7 @@ public class BulletinCalculationService {
     private final StudentGradeRepository studentGradeRepository;
     private final StudentEnrollmentRepository studentEnrollmentRepository;
     private final SubjectRepository subjectRepository;
+    private final HonorsAppreciationService honorsAppreciationService;
 
     /**
      * Calcule les bulletins de toute une classe pour une période et une année académique.
@@ -47,6 +51,12 @@ public class BulletinCalculationService {
         // 2. Récupérer toutes les évaluations de la classe pour la période
         List<Evaluation> evals = evaluationRepository
                 .findByClassroomIdAndAcademicPeriodId(classroomId, periodId);
+
+        // Récupérer les règles de mentions personnalisées de l'établissement
+        UUID tenantId = !enrollments.isEmpty() && enrollments.get(0).getTenantId() != null
+                ? enrollments.get(0).getTenantId()
+                : SecurityUtils.getCurrentTenantId();
+        List<HonorsAppreciationRule> appreciationRules = honorsAppreciationService.getOrCreateRulesForTenant(tenantId);
 
         List<StudentReportDto> reports = new ArrayList<>();
 
@@ -94,19 +104,41 @@ public class BulletinCalculationService {
                     ? totalWeightedAverage.divide(totalCoefficients, 2, RoundingMode.HALF_UP)
                     : BigDecimal.ZERO;
 
+            String appreciation = honorsAppreciationService.evaluateAppreciation(globalAverage, appreciationRules);
+
             reports.add(StudentReportDto.builder()
                     .studentId(student.getId())
                     .studentName(student.getLastName() + " " + student.getFirstName())
                     .registrationNumber(student.getRegistrationNumber())
                     .subjectsAverages(averages)
                     .globalAverage(globalAverage)
+                    .appreciation(appreciation)
                     .build());
         }
 
         // 5. Trier par moyenne décroissante et attribuer les rangs
         reports.sort((a, b) -> b.getGlobalAverage().compareTo(a.getGlobalAverage()));
+        int totalStudents = reports.size();
+
+        BigDecimal sumAverages = BigDecimal.ZERO;
+        BigDecimal minAverage = totalStudents > 0 ? reports.get(totalStudents - 1).getGlobalAverage() : BigDecimal.ZERO;
+        BigDecimal maxAverage = totalStudents > 0 ? reports.get(0).getGlobalAverage() : BigDecimal.ZERO;
+
+        for (StudentReportDto r : reports) {
+            sumAverages = sumAverages.add(r.getGlobalAverage());
+        }
+
+        BigDecimal classAverage = totalStudents > 0
+                ? sumAverages.divide(BigDecimal.valueOf(totalStudents), 2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+
         for (int i = 0; i < reports.size(); i++) {
-            reports.get(i).setRank(i + 1);
+            StudentReportDto r = reports.get(i);
+            r.setRank(i + 1);
+            r.setTotalStudents(totalStudents);
+            r.setClassAverage(classAverage);
+            r.setMinClassAverage(minAverage);
+            r.setMaxClassAverage(maxAverage);
         }
 
         return reports;
@@ -124,7 +156,6 @@ public class BulletinCalculationService {
 
         public void addGrade(BigDecimal score, BigDecimal weight, BigDecimal maxScore) {
             BigDecimal normalized = score;
-            // Normalisation sur 20 si le barème est différent
             if (maxScore != null && maxScore.compareTo(new BigDecimal("20.00")) != 0
                     && maxScore.compareTo(BigDecimal.ZERO) > 0) {
                 normalized = score.multiply(new BigDecimal("20.00"))

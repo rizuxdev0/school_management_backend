@@ -14,7 +14,10 @@ import java.util.UUID;
  * Contient des contraintes de validation de données (JSR-380).
  */
 @Entity
-@Table(name = "students")
+@Table(name = "students", indexes = {
+    @Index(name = "idx_students_tenant", columnList = "tenant_id"),
+    @Index(name = "idx_students_parent_phone", columnList = "tenant_id, parent_phone")
+})
 @Getter
 @Setter
 @NoArgsConstructor

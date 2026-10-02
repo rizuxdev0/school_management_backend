@@ -35,6 +35,9 @@ public class Tenant {
     @Column(name = "domain_name", length = 100)
     private String domainName;
 
+    @Column(name = "database_name", length = 100)
+    private String databaseName; // Nom de la base PostgreSQL dédiée (ex: school_tenant_demo)
+
     @Column(name = "plan_code", length = 50)
     private String planCode; // ex: STARTER, PRO, ENTERPRISE, CUSTOM
 

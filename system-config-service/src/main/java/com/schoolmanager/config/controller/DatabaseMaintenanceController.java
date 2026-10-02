@@ -43,6 +43,16 @@ public class DatabaseMaintenanceController {
     private final SchoolEventRepository schoolEventRepository;
     private final StudentScholarshipRepository studentScholarshipRepository;
     private final TimetableSlotRepository timetableSlotRepository;
+    private final com.schoolmanager.config.multitenancy.TenantDataSourceProvider tenantDataSourceProvider;
+
+    @PostMapping("/tenants/provision")
+    public ResponseEntity<Map<String, Object>> provisionTenantDatabase(@RequestBody com.schoolmanager.config.multitenancy.TenantProvisioningRequest request) {
+        tenantDataSourceProvider.provisionNewTenantDatabase(request);
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("status", "SUCCESS");
+        resp.put("message", "Base de données dédiée provisionnée avec succès pour " + request.getTenantCode());
+        return ResponseEntity.ok(resp);
+    }
 
     @GetMapping("/export/global")
     public ResponseEntity<Map<String, Object>> exportGlobalData() {

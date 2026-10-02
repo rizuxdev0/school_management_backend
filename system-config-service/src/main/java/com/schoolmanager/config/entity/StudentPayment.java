@@ -10,7 +10,11 @@ import java.util.UUID;
  * Enregistre les paiements ou versements de scolarité effectués par un élève.
  */
 @Entity
-@Table(name = "student_payments")
+@Table(name = "student_payments", indexes = {
+    @Index(name = "idx_payments_tenant_year", columnList = "tenant_id, academic_year_id"),
+    @Index(name = "idx_payments_student_year", columnList = "student_id, academic_year_id"),
+    @Index(name = "idx_payments_receipt_no", columnList = "receipt_number", unique = true)
+})
 @Getter
 @Setter
 @NoArgsConstructor

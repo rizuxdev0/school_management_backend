@@ -1,6 +1,6 @@
 package com.schoolmanager.config.service;
 
-import com.schoolmanager.config.controller.AttendanceAndFinanceController.AmortizationInstallmentDto;
+import com.schoolmanager.config.service.FinanceService.AmortizationInstallmentDto;
 import com.schoolmanager.config.entity.*;
 import com.schoolmanager.config.repository.*;
 import com.schoolmanager.config.security.SecurityUtils;

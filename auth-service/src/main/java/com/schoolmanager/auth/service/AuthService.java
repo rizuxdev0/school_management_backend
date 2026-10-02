@@ -1,21 +1,24 @@
 package com.schoolmanager.auth.service;
 
-import com.schoolmanager.auth.dto.AuthRequest;
-import com.schoolmanager.auth.dto.JwtResponse;
-import com.schoolmanager.auth.dto.TenantRegistrationDto;
+import com.schoolmanager.auth.dto.*;
 import com.schoolmanager.auth.entity.*;
 import com.schoolmanager.auth.repository.*;
 import com.schoolmanager.auth.security.JwtUtils;
 import com.schoolmanager.auth.security.PasswordValidator;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -25,13 +28,19 @@ public class AuthService {
     private final SubscriptionPlanRepository subscriptionPlanRepository;
     private final FeatureModuleRepository featureModuleRepository;
     private final RoleRepository roleRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final PasswordValidator passwordValidator;
     private final GlobalSettingRepository globalSettingRepository;
+    private final TenantDatabaseProvisioner tenantDatabaseProvisioner;
+
+    @Value("${app.jwt.refresh-expiration-ms:604800000}")
+    private long refreshExpirationMs;
 
     /**
-     * Authentifie l'utilisateur et retourne un JWT complet avec tous ses droits.
+     * Authentifie l'utilisateur et retourne un JWT complet avec son Refresh Token.
      */
     @Transactional
     public JwtResponse login(AuthRequest request) {
@@ -73,17 +82,12 @@ public class AuthService {
             }
         }
 
-        return buildJwtResponse(user);
+        return buildJwtResponse(user, true);
     }
 
     /**
      * Recharge toutes les données de l'utilisateur depuis la base de données
-     * (tenant, modules activés, quotas du plan, rôles, permissions) et réémet
-     * un nouveau JWT frais. Utilisé pour éviter la déconnexion après un changement
-     * de plan ou de droits par le Super Admin.
-     *
-     * @param username le nom d'utilisateur extrait du JWT courant (via SecurityContext)
-     * @return un nouveau JwtResponse avec les données à jour
+     * et réémet un nouveau JWT frais.
      */
     @Transactional
     public JwtResponse refreshCurrentUser(String username) {
@@ -94,14 +98,159 @@ public class AuthService {
             throw new RuntimeException("Compte désactivé ou verrouillé");
         }
 
-        return buildJwtResponse(user);
+        return buildJwtResponse(user, false);
+    }
+
+    /**
+     * Valide un Refresh Token, applique la rotation de jeton et retourne un nouveau couple JWT / Refresh Token.
+     */
+    @Transactional
+    public JwtResponse processRefreshToken(RefreshTokenRequest request) {
+        RefreshToken refreshToken = refreshTokenRepository.findByToken(request.getRefreshToken())
+                .orElseThrow(() -> new RuntimeException("Refresh Token introuvable ou invalide"));
+
+        if (refreshToken.isRevoked()) {
+            // Détection possible de vol de jeton : révocation de toutes les sessions de l'utilisateur
+            refreshTokenRepository.revokeAllByUser(refreshToken.getUser());
+            throw new RuntimeException("Refresh Token révoqué (Tentative de réutilisation suspecte)");
+        }
+
+        if (refreshToken.getExpiryDate().isBefore(Instant.now())) {
+            refreshTokenRepository.delete(refreshToken);
+            throw new RuntimeException("Refresh Token expiré. Veuillez vous reconnecter.");
+        }
+
+        User user = refreshToken.getUser();
+        if (!user.getIsActive() || !user.getIsAccountNonLocked()) {
+            throw new RuntimeException("Compte utilisateur inactif ou verrouillé");
+        }
+
+        // Révocation de l'ancien jeton (Rotation stricte)
+        refreshToken.setRevoked(true);
+        refreshTokenRepository.save(refreshToken);
+
+        // Génération d'une nouvelle session fraîche
+        return buildJwtResponse(user, true);
+    }
+
+    /**
+     * Révoque un Refresh Token lors d'une déconnexion explicite.
+     */
+    @Transactional
+    public void revokeRefreshToken(String token) {
+        if (token != null && !token.isBlank()) {
+            refreshTokenRepository.findByToken(token).ifPresent(rt -> {
+                rt.setRevoked(true);
+                refreshTokenRepository.save(rt);
+            });
+        }
+    }
+
+    /**
+     * Initialise la demande de réinitialisation de mot de passe (Mot de passe oublié).
+     */
+    @Transactional
+    public Map<String, String> requestForgotPassword(ForgotPasswordRequest request) {
+        Optional<User> userOpt;
+        String identifier = request.getIdentifier().trim();
+
+        if (request.getTenantCode() != null && !request.getTenantCode().trim().isEmpty()) {
+            String tenantCode = request.getTenantCode().trim();
+            userOpt = userRepository.findByTenantCodeAndUsername(tenantCode, identifier);
+            if (userOpt.isEmpty()) {
+                // Recherche par email dans le tenant
+                userOpt = userRepository.findAll().stream()
+                        .filter(u -> u.getTenant() != null && tenantCode.equalsIgnoreCase(u.getTenant().getCode()))
+                        .filter(u -> identifier.equalsIgnoreCase(u.getEmail()))
+                        .findFirst();
+            }
+        } else {
+            userOpt = userRepository.findByUsername(identifier);
+            if (userOpt.isEmpty()) {
+                userOpt = userRepository.findByEmail(identifier);
+            }
+        }
+
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Si un compte correspond à ces informations, un lien de réinitialisation a été préparé.");
+
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            // Invalider les anciens tokens de réinitialisation
+            passwordResetTokenRepository.invalidateAllByUser(user);
+
+            String token = UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
+            PasswordResetToken resetToken = PasswordResetToken.builder()
+                    .user(user)
+                    .token(token)
+                    .expiryDate(Instant.now().plus(30, ChronoUnit.MINUTES))
+                    .used(false)
+                    .build();
+
+            passwordResetTokenRepository.save(resetToken);
+            log.info("Clé de réinitialisation générée pour l'utilisateur '{}' : {}", user.getUsername(), token);
+
+            // Pour faciliter les tests et l'usage sans serveur SMTP externe configuré, on retourne le token
+            response.put("resetToken", token);
+        }
+
+        return response;
+    }
+
+    /**
+     * Valide le jeton et applique le nouveau mot de passe avec vérification des règles de complexité.
+     */
+    @Transactional
+    public Map<String, String> resetPassword(ResetPasswordRequest request) {
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(request.getToken())
+                .orElseThrow(() -> new RuntimeException("Jeton de réinitialisation invalide ou introuvable"));
+
+        if (resetToken.isUsed()) {
+            throw new RuntimeException("Ce jeton de réinitialisation a déjà été utilisé");
+        }
+
+        if (resetToken.getExpiryDate().isBefore(Instant.now())) {
+            throw new RuntimeException("Ce jeton de réinitialisation a expiré (durée de validité : 30 minutes)");
+        }
+
+        if (!passwordValidator.isValid(request.getNewPassword(), null)) {
+            throw new RuntimeException("Le nouveau mot de passe ne respecte pas les critères de sécurité exigés (8 caractères min, majuscule, minuscule, chiffre, symbole).");
+        }
+
+        User user = resetToken.getUser();
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        resetToken.setUsed(true);
+        passwordResetTokenRepository.save(resetToken);
+
+        // Sécurité : Révocation de toutes les sessions actives Refresh Tokens
+        refreshTokenRepository.revokeAllByUser(user);
+
+        Map<String, String> result = new HashMap<>();
+        result.put("message", "Votre mot de passe a été mis à jour avec succès. Veuillez vous connecter.");
+        return result;
+    }
+
+    /**
+     * Crée et persiste un nouveau Refresh Token pour un utilisateur donné.
+     */
+    private String createAndSaveRefreshToken(User user) {
+        String tokenString = UUID.randomUUID().toString() + "-" + UUID.randomUUID().toString();
+        RefreshToken refreshToken = RefreshToken.builder()
+                .user(user)
+                .token(tokenString)
+                .expiryDate(Instant.now().plusMillis(refreshExpirationMs))
+                .revoked(false)
+                .build();
+        refreshTokenRepository.save(refreshToken);
+        return tokenString;
     }
 
     /**
      * Construit le JwtResponse complet à partir d'un utilisateur chargé depuis la DB.
-     * Mutualisé entre login() et refreshCurrentUser() pour éviter la duplication (DRY).
      */
-    private JwtResponse buildJwtResponse(User user) {
+    private JwtResponse buildJwtResponse(User user, boolean generateRefreshToken) {
         Tenant tenant = user.getTenant();
         List<String> enabledModules = new ArrayList<>();
 
@@ -111,12 +260,12 @@ public class AuthService {
                         "L'établissement est suspendu ou désactivé. Veuillez contacter l'administrateur SVP !");
             }
             if (tenant.getSubscriptionExpiresAt() != null &&
-                tenant.getSubscriptionExpiresAt().isBefore(java.time.ZonedDateTime.now())) {
+                    tenant.getSubscriptionExpiresAt().isBefore(java.time.ZonedDateTime.now())) {
                 throw new RuntimeException(
                         "Votre abonnement SaaS a expiré le " +
-                        tenant.getSubscriptionExpiresAt().format(
-                                java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) +
-                        ". Veuillez contacter le Super Admin pour renouveler votre licence SVP !");
+                                tenant.getSubscriptionExpiresAt().format(
+                                        java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) +
+                                ". Veuillez contacter le Super Admin pour renouveler votre licence SVP !");
             }
             enabledModules = tenant.getEnabledModules().stream()
                     .map(FeatureModule::getCode)
@@ -141,6 +290,7 @@ public class AuthService {
                 auth,
                 tenant != null ? tenant.getId() : null,
                 tenant != null ? tenant.getCode() : "SUPERADMIN",
+                tenant != null ? tenant.getDatabaseName() : null,
                 tenant != null ? tenant.getPlanCode() : "SYSTEM",
                 enabledModules,
                 roles,
@@ -149,6 +299,8 @@ public class AuthService {
                 user.getEmail(),
                 user.getPhoneNumber(),
                 user.getId());
+
+        String refreshToken = generateRefreshToken ? createAndSaveRefreshToken(user) : null;
 
         Integer maxStudents = 999999;
         Integer maxStaff = 999999;
@@ -173,6 +325,7 @@ public class AuthService {
 
         return JwtResponse.builder()
                 .token(token)
+                .refreshToken(refreshToken)
                 .userId(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
@@ -180,6 +333,7 @@ public class AuthService {
                 .lastName(user.getLastName())
                 .tenantId(tenant != null ? tenant.getId() : null)
                 .tenantCode(tenant != null ? tenant.getCode() : "SUPERADMIN")
+                .databaseName(tenant != null ? tenant.getDatabaseName() : null)
                 .tenantName(tenant != null ? tenant.getName() : null)
                 .isSuperAdmin(user.getIsSuperAdmin())
                 .roles(roles)
@@ -221,10 +375,14 @@ public class AuthService {
             }
         }
 
+        String rawCode = dto.getTenantCode().trim().toLowerCase().replaceAll("[^a-z0-9_]", "_");
+        String databaseName = "school_tenant_" + rawCode;
+
         Tenant tenant = Tenant.builder()
                 .code(dto.getTenantCode())
                 .name(dto.getTenantName())
                 .domainName(dto.getDomainName())
+                .databaseName(databaseName)
                 .isActive(true)
                 .enabledModules(modules)
                 .planCode(plan.getCode())
@@ -243,7 +401,10 @@ public class AuthService {
 
         final Tenant savedTenant = tenantRepository.save(tenant);
 
-        // Création du rôle Admin Établissement (récupère le rôle système existant si présent)
+        // Auto-provisioning de la base PostgreSQL dédiée
+        tenantDatabaseProvisioner.createDatabase(databaseName);
+        tenantDatabaseProvisioner.notifySystemConfigService(savedTenant);
+
         Role adminRole = roleRepository.findByCode("SCHOOL_ADMIN")
                 .orElseGet(() -> roleRepository.save(Role.builder()
                         .tenant(savedTenant)
@@ -267,7 +428,7 @@ public class AuthService {
                 .build();
 
         userRepository.save(adminUser);
-        return tenant;
+        return savedTenant;
     }
 
     @Transactional

@@ -40,6 +40,7 @@ public class EvaluationAndGradesController {
     private final StudentRepository studentRepository;
 
     private final com.schoolmanager.config.service.BulletinCalculationService bulletinCalculationService;
+    private final com.schoolmanager.config.service.HonorsAppreciationService honorsAppreciationService;
     private final com.schoolmanager.config.service.NotificationService notificationService;
     private final com.schoolmanager.config.service.AuditLogService auditLogService;
 
@@ -196,6 +197,43 @@ public class EvaluationAndGradesController {
         return ResponseEntity.ok(bulletinCalculationService.calculateReports(classroomId, periodId, yearId));
     }
 
+    // ==================== 5. RÈGLES DE MENTIONS & APPRÉCIATIONS D'HONNEUR ====================
+
+    @GetMapping("/appreciation-rules/tenant/{tenantId}")
+    @PreAuthorize("hasAuthority('EVALUATION_VIEW') or hasAuthority('SETTINGS_VIEW')")
+    public ResponseEntity<List<com.schoolmanager.config.entity.HonorsAppreciationRule>> getAppreciationRules(@PathVariable UUID tenantId) {
+        return ResponseEntity.ok(honorsAppreciationService.getOrCreateRulesForTenant(tenantId));
+    }
+
+    @PostMapping("/appreciation-rules")
+    @PreAuthorize("hasAuthority('EVALUATION_EDIT') or hasAuthority('SETTINGS_EDIT')")
+    public ResponseEntity<com.schoolmanager.config.entity.HonorsAppreciationRule> saveAppreciationRule(
+            @RequestBody com.schoolmanager.config.entity.HonorsAppreciationRule rule) {
+        return ResponseEntity.ok(honorsAppreciationService.saveRule(rule));
+    }
+
+    @PostMapping("/appreciation-rules/save-all/tenant/{tenantId}")
+    @PreAuthorize("hasAuthority('EVALUATION_EDIT') or hasAuthority('SETTINGS_EDIT')")
+    public ResponseEntity<List<com.schoolmanager.config.entity.HonorsAppreciationRule>> saveAllAppreciationRules(
+            @PathVariable UUID tenantId,
+            @RequestBody List<com.schoolmanager.config.entity.HonorsAppreciationRule> rules) {
+        return ResponseEntity.ok(honorsAppreciationService.saveAllRules(tenantId, rules));
+    }
+
+    @DeleteMapping("/appreciation-rules/{id}")
+    @PreAuthorize("hasAuthority('EVALUATION_EDIT') or hasAuthority('SETTINGS_EDIT')")
+    public ResponseEntity<Void> deleteAppreciationRule(@PathVariable UUID id) {
+        honorsAppreciationService.deleteRule(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/appreciation-rules/reset-defaults/tenant/{tenantId}")
+    @PreAuthorize("hasAuthority('EVALUATION_EDIT') or hasAuthority('SETTINGS_EDIT')")
+    public ResponseEntity<List<com.schoolmanager.config.entity.HonorsAppreciationRule>> resetAppreciationRulesToDefaults(
+            @PathVariable UUID tenantId) {
+        return ResponseEntity.ok(honorsAppreciationService.resetToDefaults(tenantId));
+    }
+
     // Helper classes for Report Card computation
 
     @Data
@@ -207,6 +245,11 @@ public class EvaluationAndGradesController {
         private List<SubjectAverageDto> subjectsAverages;
         private BigDecimal globalAverage;
         private int rank;
+        private int totalStudents;
+        private BigDecimal classAverage;
+        private BigDecimal minClassAverage;
+        private BigDecimal maxClassAverage;
+        private String appreciation;
     }
 
     @Data

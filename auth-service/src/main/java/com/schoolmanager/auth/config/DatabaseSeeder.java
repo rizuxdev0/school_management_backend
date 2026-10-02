@@ -234,11 +234,12 @@ public class DatabaseSeeder implements CommandLineRunner {
                     .build());
         }
 
-        // PARENT (Accès suivi de son enfant)
+        // PARENT (Accès suivi de son enfant + messagerie)
         if (roleRepository.findByCode("PARENT").isEmpty()) {
             List<Permission> parentPerms = allPerms.stream()
                     .filter(p -> p.getCode().equals("ACADEMIC_VIEW") || p.getCode().equals("EVALUATION_VIEW") 
-                            || p.getCode().equals("ATTENDANCE_VIEW") || p.getCode().equals("EXAMS_VIEW"))
+                            || p.getCode().equals("ATTENDANCE_VIEW") || p.getCode().equals("EXAMS_VIEW")
+                            || p.getCode().equals("MESSAGING_VIEW") || p.getCode().equals("MESSAGING_EDIT"))
                     .toList();
             roleRepository.save(Role.builder()
                     .code("PARENT")
@@ -247,6 +248,17 @@ public class DatabaseSeeder implements CommandLineRunner {
                     .isSystemRole(true)
                     .permissions(new HashSet<>(parentPerms))
                     .build());
+        } else {
+            // Forcer la synchronisation des permissions pour le rôle PARENT existant
+            roleRepository.findByCode("PARENT").ifPresent(role -> {
+                List<Permission> parentPerms = allPerms.stream()
+                        .filter(p -> p.getCode().equals("ACADEMIC_VIEW") || p.getCode().equals("EVALUATION_VIEW") 
+                                || p.getCode().equals("ATTENDANCE_VIEW") || p.getCode().equals("EXAMS_VIEW")
+                                || p.getCode().equals("MESSAGING_VIEW") || p.getCode().equals("MESSAGING_EDIT"))
+                        .toList();
+                role.setPermissions(new HashSet<>(parentPerms));
+                roleRepository.save(role);
+            });
         }
 
         // LIBRARIAN (Gestionnaire bibliothèque)
@@ -274,6 +286,93 @@ public class DatabaseSeeder implements CommandLineRunner {
                     .nameEn("Accountant")
                     .isSystemRole(true)
                     .permissions(new HashSet<>(accountantPerms))
+                    .build());
+        }
+
+        // TEACHER (Enseignant)
+        if (roleRepository.findByCode("TEACHER").isEmpty()) {
+            List<Permission> teacherPerms = allPerms.stream()
+                    .filter(p -> p.getCode().equals("ACADEMIC_VIEW") 
+                            || p.getCode().startsWith("EVALUATION") 
+                            || p.getCode().startsWith("ATTENDANCE")
+                            || p.getCode().startsWith("MESSAGING"))
+                    .toList();
+            roleRepository.save(Role.builder()
+                    .code("TEACHER")
+                    .nameFr("Enseignant")
+                    .nameEn("Teacher")
+                    .isSystemRole(true)
+                    .permissions(new HashSet<>(teacherPerms))
+                    .build());
+        }
+
+        // TRANSPORT_MANAGER (Gestionnaire Transport)
+        if (roleRepository.findByCode("TRANSPORT_MANAGER").isEmpty()) {
+            List<Permission> transportPerms = allPerms.stream()
+                    .filter(p -> p.getCode().startsWith("TRANSPORT"))
+                    .toList();
+            roleRepository.save(Role.builder()
+                    .code("TRANSPORT_MANAGER")
+                    .nameFr("Responsable Transport")
+                    .nameEn("Transport Manager")
+                    .isSystemRole(true)
+                    .permissions(new HashSet<>(transportPerms))
+                    .build());
+        }
+
+        // CATERING_MANAGER (Responsable Cantine)
+        if (roleRepository.findByCode("CATERING_MANAGER").isEmpty()) {
+            List<Permission> cateringPerms = allPerms.stream()
+                    .filter(p -> p.getCode().startsWith("CATERING"))
+                    .toList();
+            roleRepository.save(Role.builder()
+                    .code("CATERING_MANAGER")
+                    .nameFr("Responsable Cantine")
+                    .nameEn("Catering Manager")
+                    .isSystemRole(true)
+                    .permissions(new HashSet<>(cateringPerms))
+                    .build());
+        }
+
+        // DOCTOR (Médecin / Infirmier Scolaire)
+        if (roleRepository.findByCode("DOCTOR").isEmpty()) {
+            List<Permission> medicalPerms = allPerms.stream()
+                    .filter(p -> p.getCode().startsWith("MEDICAL"))
+                    .toList();
+            roleRepository.save(Role.builder()
+                    .code("DOCTOR")
+                    .nameFr("Médecin / Infirmier Scolaire")
+                    .nameEn("School Doctor / Nurse")
+                    .isSystemRole(true)
+                    .permissions(new HashSet<>(medicalPerms))
+                    .build());
+        }
+
+        // DISCIPLINE_OFFICER (Surveillant / Conseiller de Discipline)
+        if (roleRepository.findByCode("DISCIPLINE_OFFICER").isEmpty()) {
+            List<Permission> disciplinePerms = allPerms.stream()
+                    .filter(p -> p.getCode().startsWith("DISCIPLINE"))
+                    .toList();
+            roleRepository.save(Role.builder()
+                    .code("DISCIPLINE_OFFICER")
+                    .nameFr("Surveillant / CPE")
+                    .nameEn("Discipline Officer")
+                    .isSystemRole(true)
+                    .permissions(new HashSet<>(disciplinePerms))
+                    .build());
+        }
+
+        // ACTIVITY_LEADER (Animateur Activités)
+        if (roleRepository.findByCode("ACTIVITY_LEADER").isEmpty()) {
+            List<Permission> extracurricularPerms = allPerms.stream()
+                    .filter(p -> p.getCode().startsWith("EXTRACURRICULAR"))
+                    .toList();
+            roleRepository.save(Role.builder()
+                    .code("ACTIVITY_LEADER")
+                    .nameFr("Animateur Périscolaire")
+                    .nameEn("Activity Leader")
+                    .isSystemRole(true)
+                    .permissions(new HashSet<>(extracurricularPerms))
                     .build());
         }
 

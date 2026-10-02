@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -24,23 +25,25 @@ public class JwtUtils {
     @Value("${app.jwt.expiration-ms}")
     private int jwtExpirationMs;
 
-    public String generateJwtToken(Authentication authentication, UUID tenantId, String tenantCode, String planCode, List<String> enabledModules, List<String> roles, List<String> permissions, boolean isSuperAdmin, String email, String phoneNumber, UUID userId) {
+    public String generateJwtToken(Authentication authentication, UUID tenantId, String tenantCode, String databaseName, String planCode, List<String> enabledModules, List<String> roles, List<String> permissions, boolean isSuperAdmin, String email, String phoneNumber, UUID userId) {
         String username = authentication.getName();
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("tenantId", tenantId != null ? tenantId.toString() : "");
+        claims.put("tenantCode", tenantCode != null ? tenantCode : "");
+        claims.put("databaseName", databaseName != null ? databaseName : "");
+        claims.put("planCode", planCode != null ? planCode : "SYSTEM");
+        claims.put("enabledModules", enabledModules != null ? enabledModules : List.of());
+        claims.put("roles", roles != null ? roles : List.of());
+        claims.put("permissions", permissions != null ? permissions : List.of());
+        claims.put("isSuperAdmin", isSuperAdmin);
+        claims.put("email", email != null ? email : "");
+        claims.put("phoneNumber", phoneNumber != null ? phoneNumber : "");
+        claims.put("userId", userId != null ? userId.toString() : "");
 
         return Jwts.builder()
                 .subject(username)
-                .claims(Map.of(
-                        "tenantId", tenantId != null ? tenantId.toString() : "",
-                        "tenantCode", tenantCode != null ? tenantCode : "",
-                        "planCode", planCode != null ? planCode : "SYSTEM",
-                        "enabledModules", enabledModules,
-                        "roles", roles,
-                        "permissions", permissions,
-                        "isSuperAdmin", isSuperAdmin,
-                        "email", email != null ? email : "",
-                        "phoneNumber", phoneNumber != null ? phoneNumber : "",
-                        "userId", userId != null ? userId.toString() : ""
-                ))
+                .claims(claims)
                 .issuedAt(new Date())
                 .expiration(new Date((new Date()).getTime() + jwtExpirationMs))
                 .signWith(key(), Jwts.SIG.HS256)

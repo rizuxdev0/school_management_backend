@@ -1,61 +1,31 @@
 package com.schoolmanager.config.controller;
 
-import com.schoolmanager.config.entity.Attendance;
-import com.schoolmanager.config.entity.Student;
-import com.schoolmanager.config.entity.StudentPayment;
-import com.schoolmanager.config.entity.StudentScholarship;
-import com.schoolmanager.config.entity.TuitionFee;
-import com.schoolmanager.config.repository.AttendanceRepository;
-import com.schoolmanager.config.repository.StudentPaymentRepository;
-import com.schoolmanager.config.repository.StudentRepository;
-import com.schoolmanager.config.repository.StudentScholarshipRepository;
-import com.schoolmanager.config.repository.TuitionFeeRepository;
-import com.schoolmanager.config.security.SecurityUtils;
-import lombok.Builder;
-import lombok.Data;
+import com.schoolmanager.config.entity.*;
+import com.schoolmanager.config.service.AttendanceService;
+import com.schoolmanager.config.service.FinanceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
-import com.schoolmanager.config.entity.Classroom;
-import com.schoolmanager.config.entity.StudentEnrollment;
-import com.schoolmanager.config.repository.StudentEnrollmentRepository;
-import com.schoolmanager.config.repository.ClassroomRepository;
-import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.TreeMap;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
- * Contrôleur REST pour les absences et la finance (frais, paiements, relevé, dashboard).
- * Supporte le bypass Super Admin et prévient les attaques IDOR.
+ * Contrôleur REST pour les présences/absences et la gestion financière (frais, paiements, relevé, dashboard).
+ * Délègue les règles métier et transactions aux services dédiés AttendanceService et FinanceService.
  */
 @RestController
 @RequestMapping("/api/v1/system/academics-finance")
 @RequiredArgsConstructor
 public class AttendanceAndFinanceController {
 
-    private final AttendanceRepository attendanceRepository;
-    private final TuitionFeeRepository tuitionFeeRepository;
-    private final StudentPaymentRepository studentPaymentRepository;
-    private final StudentRepository studentRepository;
-    private final StudentEnrollmentRepository studentEnrollmentRepository;
-    private final ClassroomRepository classroomRepository;
-    private final com.schoolmanager.config.service.ReceiptReportService receiptReportService;
-    private final StudentScholarshipRepository studentScholarshipRepository;
-    private final com.schoolmanager.config.service.AcademicReportService academicReportService;
+    private final AttendanceService attendanceService;
+    private final FinanceService financeService;
 
     // ==================== 1. ABSENCES & ASSIDUITÉ ====================
 
@@ -64,7 +34,7 @@ public class AttendanceAndFinanceController {
     public ResponseEntity<List<Attendance>> getAttendance(
             @PathVariable UUID classroomId,
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return ResponseEntity.ok(attendanceRepository.findByClassroomIdAndAttendanceDate(classroomId, date));
+        return ResponseEntity.ok(attendanceService.getAttendanceByClassroomAndDate(classroomId, date));
     }
 
     @GetMapping("/attendance/classroom/{classroomId}/date/{date}/pdf")
@@ -72,10 +42,9 @@ public class AttendanceAndFinanceController {
     public ResponseEntity<byte[]> downloadAttendanceListPdf(
             @PathVariable UUID classroomId,
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        UUID tenantId = SecurityUtils.getCurrentTenantId();
-        byte[] pdf = academicReportService.generateAttendanceListPdf(tenantId, classroomId, date);
-        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-        headers.setContentType(org.springframework.http.MediaType.APPLICATION_PDF);
+        byte[] pdf = attendanceService.generateAttendanceListPdf(classroomId, date);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
         headers.setContentDispositionFormData("attachment", "liste_presence_" + date + ".pdf");
         return ResponseEntity.ok().headers(headers).body(pdf);
     }
@@ -86,10 +55,9 @@ public class AttendanceAndFinanceController {
             @PathVariable UUID classroomId,
             @RequestParam("startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam("endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        UUID tenantId = SecurityUtils.getCurrentTenantId();
-        byte[] pdf = academicReportService.generateAttendanceListRangePdf(tenantId, classroomId, startDate, endDate);
-        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-        headers.setContentType(org.springframework.http.MediaType.APPLICATION_PDF);
+        byte[] pdf = attendanceService.generateAttendanceListRangePdf(classroomId, startDate, endDate);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
         headers.setContentDispositionFormData("attachment", "liste_presence_" + startDate + "_au_" + endDate + ".pdf");
         return ResponseEntity.ok().headers(headers).body(pdf);
     }
@@ -97,585 +65,105 @@ public class AttendanceAndFinanceController {
     @PostMapping("/attendance/save-all")
     @PreAuthorize("hasAuthority('ATTENDANCE_EDIT')")
     public ResponseEntity<List<Attendance>> saveAttendance(@RequestBody List<Attendance> attendanceList) {
-        // Super Admin can save attendance for any tenant (tenantId comes from payload)
-        List<Attendance> saved = new ArrayList<>();
-        for (Attendance att : attendanceList) {
-            if (!SecurityUtils.isSuperAdmin()) {
-                att.setTenantId(SecurityUtils.getCurrentTenantId());
-            }
-
-            // Resolve transient Student entity to prevent TransientPropertyValueException
-            if (att.getStudent() != null && att.getStudent().getId() != null) {
-                Student s = studentRepository.findById(att.getStudent().getId())
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable"));
-                SecurityUtils.assertOwnership(s.getTenantId());
-                att.setStudent(s);
-            }
-
-            // Resolve transient Classroom entity to prevent TransientPropertyValueException
-            if (att.getClassroom() != null && att.getClassroom().getId() != null) {
-                Classroom c = classroomRepository.findById(att.getClassroom().getId())
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Classe introuvable"));
-                SecurityUtils.assertOwnership(c.getTenantId());
-                att.setClassroom(c);
-            }
-
-            Optional<Attendance> existing = attendanceRepository.findByStudentIdAndAttendanceDate(
-                    att.getStudent().getId(),
-                    att.getAttendanceDate()
-            );
-            if (existing.isPresent()) {
-                Attendance e = existing.get();
-                e.setStatus(att.getStatus());
-                e.setIsExcused(att.getIsExcused());
-                e.setRemarks(att.getRemarks());
-                saved.add(attendanceRepository.save(e));
-            } else {
-                saved.add(attendanceRepository.save(att));
-            }
-        }
-        return ResponseEntity.ok(saved);
+        return ResponseEntity.ok(attendanceService.saveAttendanceList(attendanceList));
     }
 
-    // ==================== 1.5. TABLEAU DE BORD FINANCIER & SCOLARITÉ (DASHBOARD) ====================
+    // ==================== 2. TABLEAU DE BORD FINANCIER ====================
 
     @GetMapping("/dashboard/stats/tenant/{tenantId}/year/{yearId}")
     @PreAuthorize("hasAuthority('FINANCE_VIEW')")
-    public ResponseEntity<FinanceDashboardStatsDto> getFinanceDashboardStats(
+    public ResponseEntity<FinanceService.FinanceDashboardStatsDto> getFinanceDashboardStats(
             @PathVariable UUID tenantId,
             @PathVariable UUID yearId) {
-
-        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
-
-        // 1. Fetch all enrollments for this tenant and academic year
-        List<StudentEnrollment> enrollments = studentEnrollmentRepository.findByTenantIdAndAcademicYearId(jwtTenantId, yearId);
-
-        // 2. Fetch all tuition fees for this tenant and academic year
-        List<TuitionFee> allFees = tuitionFeeRepository.findByTenantIdAndAcademicYearId(jwtTenantId, yearId);
-
-        // Map academicLevelId -> list of fees
-        Map<UUID, List<TuitionFee>> feesByLevel = allFees.stream()
-                .filter(f -> f.getAcademicLevel() != null)
-                .collect(Collectors.groupingBy(f -> f.getAcademicLevel().getId()));
-
-        // 3. Fetch all payments for this tenant and academic year
-        List<StudentPayment> allPayments = studentPaymentRepository.findByTenantIdAndAcademicYearId(jwtTenantId, yearId);
-
-        BigDecimal totalPaid = allPayments.stream()
-                .map(p -> p.getAmountPaid() != null ? p.getAmountPaid() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        // Group enrollments by Classroom
-        Map<Classroom, List<StudentEnrollment>> enrollmentsByClass = enrollments.stream()
-                .filter(e -> e.getClassroom() != null)
-                .collect(Collectors.groupingBy(StudentEnrollment::getClassroom));
-
-        BigDecimal totalExigible = BigDecimal.ZERO;
-        List<ClassRecoveryRateDto> classRecoveryRates = new ArrayList<>();
-
-        // Map studentId -> total paid by that student
-        Map<UUID, BigDecimal> paymentsByStudent = allPayments.stream()
-                .filter(p -> p.getStudent() != null)
-                .collect(Collectors.groupingBy(
-                        p -> p.getStudent().getId(),
-                        Collectors.reducing(BigDecimal.ZERO, p -> p.getAmountPaid() != null ? p.getAmountPaid() : BigDecimal.ZERO, BigDecimal::add)
-                ));
-
-        for (Map.Entry<Classroom, List<StudentEnrollment>> entry : enrollmentsByClass.entrySet()) {
-            Classroom classroom = entry.getKey();
-            List<StudentEnrollment> classEnrollments = entry.getValue();
-
-            BigDecimal classExigible = BigDecimal.ZERO;
-            if (classroom.getAcademicLevel() != null) {
-                UUID levelId = classroom.getAcademicLevel().getId();
-                List<TuitionFee> levelFees = feesByLevel.getOrDefault(levelId, Collections.emptyList());
-                BigDecimal levelTotalFee = levelFees.stream()
-                        .map(f -> f.getAmount() != null ? f.getAmount() : BigDecimal.ZERO)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-                classExigible = levelTotalFee.multiply(BigDecimal.valueOf(classEnrollments.size()));
-            }
-
-            BigDecimal classPaid = BigDecimal.ZERO;
-            for (StudentEnrollment enrollment : classEnrollments) {
-                if (enrollment.getStudent() != null) {
-                    BigDecimal studentPaid = paymentsByStudent.getOrDefault(enrollment.getStudent().getId(), BigDecimal.ZERO);
-                    classPaid = classPaid.add(studentPaid);
-                }
-            }
-
-            double classRate = classExigible.compareTo(BigDecimal.ZERO) > 0
-                    ? classPaid.divide(classExigible, 4, java.math.RoundingMode.HALF_UP).doubleValue() * 100.0
-                    : 0.0;
-
-            classRecoveryRates.add(ClassRecoveryRateDto.builder()
-                    .classroomId(classroom.getId())
-                    .className(classroom.getName())
-                    .classCode(classroom.getCode())
-                    .totalStudents(classEnrollments.size())
-                    .exigible(classExigible)
-                    .paid(classPaid)
-                    .recoveryRate(Math.round(classRate * 100.0) / 100.0)
-                    .build());
-
-            totalExigible = totalExigible.add(classExigible);
-        }
-
-        classRecoveryRates.sort(Comparator.comparingDouble(ClassRecoveryRateDto::getRecoveryRate));
-
-        BigDecimal totalBalance = totalExigible.subtract(totalPaid);
-        if (totalBalance.compareTo(BigDecimal.ZERO) < 0) {
-            totalBalance = BigDecimal.ZERO;
-        }
-        double overallRate = totalExigible.compareTo(BigDecimal.ZERO) > 0
-                ? totalPaid.divide(totalExigible, 4, java.math.RoundingMode.HALF_UP).doubleValue() * 100.0
-                : 0.0;
-
-        // 4. Monthly collections
-        Map<String, BigDecimal> monthlyMap = new TreeMap<>();
-        for (StudentPayment p : allPayments) {
-            if (p.getPaymentDate() != null) {
-                String monthKey = p.getPaymentDate().getYear() + "-" + String.format("%02d", p.getPaymentDate().getMonthValue());
-                BigDecimal amt = p.getAmountPaid() != null ? p.getAmountPaid() : BigDecimal.ZERO;
-                monthlyMap.put(monthKey, monthlyMap.getOrDefault(monthKey, BigDecimal.ZERO).add(amt));
-            }
-        }
-        List<MonthlyCollectionDto> monthlyCollections = monthlyMap.entrySet().stream()
-                .map(e -> MonthlyCollectionDto.builder()
-                        .month(e.getKey())
-                        .amount(e.getValue())
-                        .build())
-                .collect(Collectors.toList());
-
-        // 5. Payment method breakdown
-        Map<String, BigDecimal> methodMap = new HashMap<>();
-        for (StudentPayment p : allPayments) {
-            String method = p.getPaymentMethod() != null && !p.getPaymentMethod().trim().isEmpty()
-                    ? p.getPaymentMethod().trim().toUpperCase()
-                    : "AUTRE";
-            BigDecimal amt = p.getAmountPaid() != null ? p.getAmountPaid() : BigDecimal.ZERO;
-            methodMap.put(method, methodMap.getOrDefault(method, BigDecimal.ZERO).add(amt));
-        }
-        List<PaymentMethodStatDto> paymentMethodBreakdown = new ArrayList<>();
-        for (Map.Entry<String, BigDecimal> entry : methodMap.entrySet()) {
-            double methodRate = totalPaid.compareTo(BigDecimal.ZERO) > 0
-                    ? entry.getValue().divide(totalPaid, 4, java.math.RoundingMode.HALF_UP).doubleValue() * 100.0
-                    : 0.0;
-            paymentMethodBreakdown.add(PaymentMethodStatDto.builder()
-                    .method(entry.getKey())
-                    .amount(entry.getValue())
-                    .percentage(Math.round(methodRate * 100.0) / 100.0)
-                    .build());
-        }
-
-        // 6. Recent payments
-        List<StudentPayment> recentPayments = allPayments.stream()
-                .sorted(Comparator.comparing(StudentPayment::getPaymentDate, Comparator.nullsLast(Comparator.reverseOrder())))
-                .limit(10)
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(FinanceDashboardStatsDto.builder()
-                .totalExigible(totalExigible)
-                .totalPaid(totalPaid)
-                .totalBalance(totalBalance)
-                .recoveryRate(Math.round(overallRate * 100.0) / 100.0)
-                .monthlyCollections(monthlyCollections)
-                .paymentMethodBreakdown(paymentMethodBreakdown)
-                .classRecoveryRates(classRecoveryRates)
-                .recentPayments(recentPayments)
-                .build());
+        return ResponseEntity.ok(financeService.getFinanceDashboardStats(tenantId, yearId));
     }
 
-    // ==================== 2. CONFIGURATION DES FRAIS / FEES ====================
+    // ==================== 3. CONFIGURATION DES FRAIS ====================
 
     @GetMapping("/fees/tenant/{tenantId}/year/{yearId}")
     @PreAuthorize("hasAuthority('FINANCE_VIEW')")
     public ResponseEntity<List<TuitionFee>> getFees(
             @PathVariable UUID tenantId,
             @PathVariable UUID yearId) {
-        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
-        return ResponseEntity.ok(tuitionFeeRepository.findByTenantIdAndAcademicYearId(jwtTenantId, yearId));
+        return ResponseEntity.ok(financeService.getFees(tenantId, yearId));
     }
 
     @PostMapping("/fees")
     @PreAuthorize("hasAuthority('FINANCE_EDIT')")
     public ResponseEntity<TuitionFee> saveFee(@RequestBody TuitionFee fee) {
-        if (!SecurityUtils.isSuperAdmin()) {
-            fee.setTenantId(SecurityUtils.getCurrentTenantId());
-        }
-        return ResponseEntity.ok(tuitionFeeRepository.save(fee));
+        return ResponseEntity.ok(financeService.saveFee(fee));
     }
 
     @DeleteMapping("/fees/{id}")
     @PreAuthorize("hasAuthority('FINANCE_EDIT')")
     public ResponseEntity<Void> deleteFee(@PathVariable UUID id) {
-        TuitionFee fee = tuitionFeeRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Frais de scolarité introuvable"));
-        SecurityUtils.assertOwnership(fee.getTenantId());
-        tuitionFeeRepository.deleteById(id);
+        financeService.deleteFee(id);
         return ResponseEntity.noContent().build();
     }
 
-    // ==================== 3. REGISTRE DES PAIEMENTS / PAYMENTS ====================
+    // ==================== 4. REGISTRE DES PAIEMENTS ====================
 
     @GetMapping("/payments/tenant/{tenantId}/year/{yearId}")
     @PreAuthorize("hasAuthority('FINANCE_VIEW')")
     public ResponseEntity<List<StudentPayment>> getPayments(
             @PathVariable UUID tenantId,
             @PathVariable UUID yearId) {
-        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
-        return ResponseEntity.ok(studentPaymentRepository.findByTenantIdAndAcademicYearId(jwtTenantId, yearId));
+        return ResponseEntity.ok(financeService.getPayments(tenantId, yearId));
     }
 
     @PostMapping("/payments")
     @PreAuthorize("hasAuthority('FINANCE_EDIT')")
     public ResponseEntity<StudentPayment> savePayment(@RequestBody StudentPayment payment) {
-        UUID tenantId = SecurityUtils.isSuperAdmin() ? payment.getTenantId() : SecurityUtils.getCurrentTenantId();
-        if (tenantId == null) {
-            tenantId = UUID.fromString("00000000-0000-0000-0000-000000000000");
-        }
-        payment.setTenantId(tenantId);
-
-        // Resolve transient Student entity to prevent TransientPropertyValueException
-        if (payment.getStudent() != null && payment.getStudent().getId() != null) {
-            Student s = studentRepository.findById(payment.getStudent().getId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable"));
-            SecurityUtils.assertOwnership(s.getTenantId());
-            payment.setStudent(s);
-        }
-
-        // Intégrité Financière : Validation du montant payé par rapport au solde restant
-        if (payment.getStudent() != null && payment.getStudent().getId() != null && payment.getAcademicYearId() != null) {
-            UUID studentId = payment.getStudent().getId();
-            UUID yearId = payment.getAcademicYearId();
-
-            Optional<StudentEnrollment> enrollmentOpt = studentEnrollmentRepository.findByStudentIdAndAcademicYearId(studentId, yearId);
-            if (enrollmentOpt.isPresent()) {
-                StudentEnrollment enrollment = enrollmentOpt.get();
-                if (enrollment.getClassroom() != null && enrollment.getClassroom().getAcademicLevel() != null) {
-                    UUID levelId = enrollment.getClassroom().getAcademicLevel().getId();
-
-                    // 1. Calcul du total des frais exigibles pour ce niveau et cette année
-                    List<TuitionFee> fees = tuitionFeeRepository.findByAcademicLevelIdAndAcademicYearId(levelId, yearId);
-                    BigDecimal totalGrossExigible = fees.stream()
-                            .map(TuitionFee::getAmount)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-                    // 2. Déduction des bourses d'études
-                    List<StudentScholarship> scholarships = studentScholarshipRepository.findByStudentIdAndAcademicYearId(studentId, yearId);
-                    BigDecimal totalScholarshipDiscount = BigDecimal.ZERO;
-                    for (StudentScholarship sch : scholarships) {
-                        if ("PERCENTAGE".equalsIgnoreCase(sch.getDiscountType())) {
-                            BigDecimal disc = totalGrossExigible.multiply(sch.getDiscountValue())
-                                    .divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
-                            totalScholarshipDiscount = totalScholarshipDiscount.add(disc);
-                        } else {
-                            totalScholarshipDiscount = totalScholarshipDiscount.add(sch.getDiscountValue());
-                        }
-                    }
-                    if (totalScholarshipDiscount.compareTo(totalGrossExigible) > 0) {
-                        totalScholarshipDiscount = totalGrossExigible;
-                    }
-                    BigDecimal totalExigible = totalGrossExigible.subtract(totalScholarshipDiscount);
-
-                    // 3. Somme des paiements déjà effectués (en excluant le paiement actuel en cas de mise à jour)
-                    List<StudentPayment> existingPayments = studentPaymentRepository.findByStudentIdAndAcademicYearId(studentId, yearId);
-                    BigDecimal totalPaid = existingPayments.stream()
-                            .filter(p -> payment.getId() == null || !p.getId().equals(payment.getId()))
-                            .map(StudentPayment::getAmountPaid)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-                    BigDecimal remainingBalance = totalExigible.subtract(totalPaid);
-
-                    // Si le nouveau montant à payer dépasse le solde restant (avec tolérance sur les centimes)
-                    if (payment.getAmountPaid() != null && payment.getAmountPaid().compareTo(remainingBalance.add(BigDecimal.valueOf(0.01))) > 0) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                String.format("Le versement saisi (%s) dépasse le solde restant dû de l'élève qui est de %s pour cette année scolaire.",
-                                        payment.getAmountPaid(), remainingBalance));
-                    }
-                }
-            }
-        }
-
-        // Auto-generate receipt number if missing
-        if (payment.getReceiptNumber() == null || payment.getReceiptNumber().trim().isEmpty()) {
-            long count = studentPaymentRepository.count() + 1;
-            String prefix = "REC-" + LocalDate.now().getYear() + "-";
-            payment.setReceiptNumber(prefix + String.format("%05d", count));
-        }
-        return ResponseEntity.ok(studentPaymentRepository.save(payment));
+        return ResponseEntity.ok(financeService.savePayment(payment));
     }
 
     @DeleteMapping("/payments/{id}")
     @PreAuthorize("hasAuthority('FINANCE_EDIT')")
     public ResponseEntity<Void> deletePayment(@PathVariable UUID id) {
-        StudentPayment payment = studentPaymentRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Paiement introuvable"));
-        SecurityUtils.assertOwnership(payment.getTenantId());
-        studentPaymentRepository.deleteById(id);
+        financeService.deletePayment(id);
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping(value = "/payments/{id}/receipt", produces = org.springframework.http.MediaType.APPLICATION_PDF_VALUE)
+    @GetMapping(value = "/payments/{id}/receipt", produces = MediaType.APPLICATION_PDF_VALUE)
     @PreAuthorize("hasAuthority('FINANCE_VIEW')")
     public ResponseEntity<byte[]> generateReceipt(@PathVariable UUID id) {
-        byte[] pdfBytes = receiptReportService.generatePaymentReceipt(id);
+        byte[] pdfBytes = financeService.generatePaymentReceiptPdf(id);
         return ResponseEntity.ok()
-                .header("Content-Disposition", "inline; filename=\"recu_" + id + ".pdf\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"recu_" + id + ".pdf\"")
                 .body(pdfBytes);
     }
 
-    // ==================== 3.5. BOURSES & PRISES EN CHARGE (SCHOLARSHIPS & WAIVERS) ====================
+    // ==================== 5. BOURSES & PRISES EN CHARGE ====================
 
     @GetMapping("/scholarships/tenant/{tenantId}/year/{yearId}")
     @PreAuthorize("hasAuthority('FINANCE_VIEW')")
     public ResponseEntity<List<StudentScholarship>> getScholarships(
             @PathVariable UUID tenantId,
             @PathVariable UUID yearId) {
-        UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
-        return ResponseEntity.ok(studentScholarshipRepository.findByTenantIdAndAcademicYearId(jwtTenantId, yearId));
+        return ResponseEntity.ok(financeService.getScholarships(tenantId, yearId));
     }
 
     @PostMapping("/scholarships")
     @PreAuthorize("hasAuthority('FINANCE_EDIT')")
     public ResponseEntity<StudentScholarship> saveScholarship(@RequestBody StudentScholarship scholarship) {
-        if (!SecurityUtils.isSuperAdmin()) {
-            scholarship.setTenantId(SecurityUtils.getCurrentTenantId());
-        }
-
-        // Resolve transient Student entity to prevent TransientPropertyValueException
-        if (scholarship.getStudent() != null && scholarship.getStudent().getId() != null) {
-            Student s = studentRepository.findById(scholarship.getStudent().getId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable"));
-            SecurityUtils.assertOwnership(s.getTenantId());
-            scholarship.setStudent(s);
-        }
-
-        return ResponseEntity.ok(studentScholarshipRepository.save(scholarship));
+        return ResponseEntity.ok(financeService.saveScholarship(scholarship));
     }
 
     @DeleteMapping("/scholarships/{id}")
     @PreAuthorize("hasAuthority('FINANCE_EDIT')")
     public ResponseEntity<Void> deleteScholarship(@PathVariable UUID id) {
-        StudentScholarship scholarship = studentScholarshipRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bourse ou prise en charge introuvable"));
-        SecurityUtils.assertOwnership(scholarship.getTenantId());
-        studentScholarshipRepository.deleteById(id);
+        financeService.deleteScholarship(id);
         return ResponseEntity.noContent().build();
     }
 
-    // ==================== 4. LE RELEVÉ FINANCIER DE L'ÉLÈVE / LEDGER ====================
+    // ==================== 6. RELEVÉ FINANCIER ÉLÈVE ====================
 
     @GetMapping("/ledger/student/{studentId}/year/{yearId}/level/{levelId}")
     @PreAuthorize("hasAuthority('FINANCE_VIEW')")
-    public ResponseEntity<StudentLedgerDto> getStudentLedger(
+    public ResponseEntity<FinanceService.StudentLedgerDto> getStudentLedger(
             @PathVariable UUID studentId,
             @PathVariable UUID yearId,
             @PathVariable UUID levelId) {
-
-        Student student = studentRepository.findById(studentId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Élève introuvable"));
-
-        // Super Admin can see any tenant's ledger — regular users are restricted to their own
-        SecurityUtils.assertOwnership(student.getTenantId());
-
-        List<TuitionFee> fees = tuitionFeeRepository
-                .findByAcademicLevelIdAndAcademicYearId(levelId, yearId);
-
-        BigDecimal totalGrossExigible = fees.stream()
-                .map(TuitionFee::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        List<StudentScholarship> scholarships = studentScholarshipRepository
-                .findByStudentIdAndAcademicYearId(studentId, yearId);
-
-        BigDecimal totalScholarshipDiscount = BigDecimal.ZERO;
-        for (StudentScholarship sch : scholarships) {
-            if ("PERCENTAGE".equalsIgnoreCase(sch.getDiscountType())) {
-                BigDecimal disc = totalGrossExigible.multiply(sch.getDiscountValue())
-                        .divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
-                totalScholarshipDiscount = totalScholarshipDiscount.add(disc);
-            } else {
-                totalScholarshipDiscount = totalScholarshipDiscount.add(sch.getDiscountValue());
-            }
-        }
-        if (totalScholarshipDiscount.compareTo(totalGrossExigible) > 0) {
-            totalScholarshipDiscount = totalGrossExigible;
-        }
-
-        BigDecimal totalExigible = totalGrossExigible.subtract(totalScholarshipDiscount);
-
-        List<StudentPayment> payments = studentPaymentRepository
-                .findByStudentIdAndAcademicYearId(studentId, yearId);
-
-        BigDecimal totalPaid = payments.stream()
-                .map(StudentPayment::getAmountPaid)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        BigDecimal balance = totalExigible.subtract(totalPaid);
-
-        // --- GÉNÉRATION DYNAMIQUE DU TABLEAU D'AMORTISSEMENT ---
-        List<AmortizationInstallmentDto> amortizationTable = new ArrayList<>();
-
-        for (TuitionFee fee : fees) {
-            int count = fee.getInstallmentsCount() != null ? fee.getInstallmentsCount() : 1;
-            String freq = fee.getPaymentFrequency() != null ? fee.getPaymentFrequency() : "UNIQUE";
-            BigDecimal totalAmount = fee.getAmount();
-            if (totalGrossExigible.compareTo(BigDecimal.ZERO) > 0 && totalScholarshipDiscount.compareTo(BigDecimal.ZERO) > 0) {
-                totalAmount = fee.getAmount().multiply(totalExigible)
-                        .divide(totalGrossExigible, 2, java.math.RoundingMode.HALF_UP);
-            }
-
-            if (count <= 1) {
-                // Tranche unique
-                amortizationTable.add(AmortizationInstallmentDto.builder()
-                        .feeName(fee.getName())
-                        .installmentNumber(1)
-                        .totalInstallments(1)
-                        .amountDue(totalAmount)
-                        .amountPaid(BigDecimal.ZERO)
-                        .amountRemaining(totalAmount)
-                        .dueDate(LocalDate.now().withMonth(9).withDayOfMonth(15)) // Rentrée scolaire
-                        .status("PENDING")
-                        .build());
-            } else {
-                BigDecimal installmentAmount = totalAmount.divide(BigDecimal.valueOf(count), 2, java.math.RoundingMode.HALF_UP);
-                BigDecimal remainder = totalAmount.subtract(installmentAmount.multiply(BigDecimal.valueOf(count - 1)));
-
-                LocalDate baseDate = LocalDate.now().withMonth(9).withDayOfMonth(15);
-
-                for (int i = 1; i <= count; i++) {
-                    BigDecimal due = (i == count) ? remainder : installmentAmount;
-                    LocalDate dueDate;
-                    if ("MONTHLY".equalsIgnoreCase(freq)) {
-                        dueDate = baseDate.plusMonths(i - 1);
-                    } else if ("TRIMESTRIEL".equalsIgnoreCase(freq)) {
-                        dueDate = baseDate.plusMonths((i - 1) * 3);
-                    } else {
-                        dueDate = baseDate;
-                    }
-
-                    amortizationTable.add(AmortizationInstallmentDto.builder()
-                            .feeName(fee.getName())
-                            .installmentNumber(i)
-                            .totalInstallments(count)
-                            .amountDue(due)
-                            .amountPaid(BigDecimal.ZERO)
-                            .amountRemaining(due)
-                            .dueDate(dueDate)
-                            .status("PENDING")
-                            .build());
-                }
-            }
-        }
-
-        // Tri chronologique FIFO des tranches théoriques
-        amortizationTable.sort(java.util.Comparator.comparing(AmortizationInstallmentDto::getDueDate));
-
-        // Répartition FIFO du total payé
-        BigDecimal remainingPaid = totalPaid;
-        for (AmortizationInstallmentDto inst : amortizationTable) {
-            if (remainingPaid.compareTo(BigDecimal.ZERO) <= 0) {
-                inst.setStatus("PENDING");
-                continue;
-            }
-
-            BigDecimal due = inst.getAmountDue();
-            if (remainingPaid.compareTo(due) >= 0) {
-                inst.setAmountPaid(due);
-                inst.setAmountRemaining(BigDecimal.ZERO);
-                inst.setStatus("PAID");
-                remainingPaid = remainingPaid.subtract(due);
-            } else {
-                inst.setAmountPaid(remainingPaid);
-                inst.setAmountRemaining(due.subtract(remainingPaid));
-                inst.setStatus("PARTIAL");
-                remainingPaid = BigDecimal.ZERO;
-            }
-        }
-
-        return ResponseEntity.ok(StudentLedgerDto.builder()
-                .studentId(studentId)
-                .studentName(student.getLastName() + " " + student.getFirstName())
-                .registrationNumber(student.getRegistrationNumber())
-                .totalGrossExigible(totalGrossExigible)
-                .totalScholarshipDiscount(totalScholarshipDiscount)
-                .totalExigible(totalExigible)
-                .totalPaid(totalPaid)
-                .balance(balance)
-                .scholarships(scholarships)
-                .payments(payments)
-                .feesStructure(fees)
-                .amortizationTable(amortizationTable)
-                .build());
-    }
-
-    @Data
-    @Builder
-    public static class StudentLedgerDto {
-        private UUID studentId;
-        private String studentName;
-        private String registrationNumber;
-        private BigDecimal totalGrossExigible;
-        private BigDecimal totalScholarshipDiscount;
-        private BigDecimal totalExigible;
-        private BigDecimal totalPaid;
-        private BigDecimal balance;
-        private List<StudentScholarship> scholarships;
-        private List<StudentPayment> payments;
-        private List<TuitionFee> feesStructure;
-        private List<AmortizationInstallmentDto> amortizationTable;
-    }
-
-    @Data
-    @Builder
-    public static class AmortizationInstallmentDto {
-        private String feeName;
-        private int installmentNumber;
-        private int totalInstallments;
-        private BigDecimal amountDue;
-        private BigDecimal amountPaid;
-        private BigDecimal amountRemaining;
-        private LocalDate dueDate;
-        private String status; // PAID, PARTIAL, PENDING
-    }
-
-    @Data
-    @Builder
-    public static class FinanceDashboardStatsDto {
-        private BigDecimal totalExigible;
-        private BigDecimal totalPaid;
-        private BigDecimal totalBalance;
-        private double recoveryRate;
-        private List<MonthlyCollectionDto> monthlyCollections;
-        private List<PaymentMethodStatDto> paymentMethodBreakdown;
-        private List<ClassRecoveryRateDto> classRecoveryRates;
-        private List<StudentPayment> recentPayments;
-    }
-
-    @Data
-    @Builder
-    public static class MonthlyCollectionDto {
-        private String month;
-        private BigDecimal amount;
-    }
-
-    @Data
-    @Builder
-    public static class PaymentMethodStatDto {
-        private String method;
-        private BigDecimal amount;
-        private double percentage;
-    }
-
-    @Data
-    @Builder
-    public static class ClassRecoveryRateDto {
-        private UUID classroomId;
-        private String className;
-        private String classCode;
-        private int totalStudents;
-        private BigDecimal exigible;
-        private BigDecimal paid;
-        private double recoveryRate;
+        return ResponseEntity.ok(financeService.getStudentLedger(studentId, yearId, levelId));
     }
 }

@@ -149,12 +149,45 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                // --- MULTI-TENANCY DATABASE-PER-TENANT RESOLUTION ---
+                String tenantKey = com.schoolmanager.config.multitenancy.TenantContext.DEFAULT_TENANT;
+                String databaseName = claims.get("databaseName", String.class);
+                String tenantCode = claims.get("tenantCode", String.class);
+
+                if (Boolean.TRUE.equals(isSuperAdmin)) {
+                    String overrideTenant = request.getHeader("X-Tenant-Code");
+                    if (overrideTenant == null || overrideTenant.isBlank()) {
+                        overrideTenant = request.getHeader("X-Tenant-Database");
+                    }
+                    if (overrideTenant != null && !overrideTenant.isBlank()) {
+                        tenantKey = com.schoolmanager.config.multitenancy.TenantContext.sanitizeTenantKey(overrideTenant);
+                    } else if (databaseName != null && !databaseName.isBlank()) {
+                        tenantKey = com.schoolmanager.config.multitenancy.TenantContext.sanitizeTenantKey(databaseName);
+                    } else if (tenantCode != null && !tenantCode.isBlank() && !"SUPERADMIN".equalsIgnoreCase(tenantCode)) {
+                        tenantKey = com.schoolmanager.config.multitenancy.TenantContext.sanitizeTenantKey(tenantCode);
+                    }
+                } else {
+                    if (databaseName != null && !databaseName.isBlank()) {
+                        tenantKey = com.schoolmanager.config.multitenancy.TenantContext.sanitizeTenantKey(databaseName);
+                    } else if (tenantCode != null && !tenantCode.isBlank() && !"SUPERADMIN".equalsIgnoreCase(tenantCode)) {
+                        tenantKey = com.schoolmanager.config.multitenancy.TenantContext.sanitizeTenantKey(tenantCode);
+                    } else if (rawTenantId != null && !rawTenantId.isBlank()) {
+                        tenantKey = com.schoolmanager.config.multitenancy.TenantContext.sanitizeTenantKey(rawTenantId);
+                    }
+                }
+
+                com.schoolmanager.config.multitenancy.TenantContext.setCurrentTenant(tenantKey);
             }
         } catch (Exception e) {
             log.error("Cannot set user authentication in system-config: {}", e.getMessage());
         }
 
-        filterChain.doFilter(request, response);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            com.schoolmanager.config.multitenancy.TenantContext.clear();
+        }
     }
 
     private void rejectRequest(HttpServletResponse response, String reason) throws IOException {

@@ -65,7 +65,7 @@ public class UserManagementController {
     // ==================== LISTER LES UTILISATEURS ====================
 
     @GetMapping("/tenant/{tenantId}")
-    @PreAuthorize("hasAuthority('HR_VIEW')")
+    @PreAuthorize("hasAuthority('HR_VIEW') or hasAuthority('ACADEMIC_VIEW')")
     public ResponseEntity<List<User>> getUsersByTenant(@PathVariable UUID tenantId) {
         User currentUser = getCurrentUser();
         UUID targetTenantId = Boolean.TRUE.equals(currentUser.getIsSuperAdmin()) ? tenantId : currentUser.getTenant().getId();

@@ -14,6 +14,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class JwtResponse {
     private String token;
+    private String refreshToken;
     @Builder.Default
     private String type = "Bearer";
     private UUID userId;
@@ -23,6 +24,7 @@ public class JwtResponse {
     private String lastName;
     private UUID tenantId;
     private String tenantCode;
+    private String databaseName;
     /** Nom complet de l'établissement (ex: "INSTITUT POLYTECHNIQUE DEFITECH") */
     private String tenantName;
     private Boolean isSuperAdmin;

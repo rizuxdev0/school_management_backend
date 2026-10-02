@@ -18,6 +18,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import com.schoolmanager.config.service.NotificationService;
+
 @RestController
 @RequestMapping("/api/v1/system/extracurricular")
 @RequiredArgsConstructor
@@ -26,6 +28,7 @@ public class ExtracurricularController {
     private final SchoolClubRepository schoolClubRepository;
     private final ClubEnrollmentRepository clubEnrollmentRepository;
     private final StudentRepository studentRepository;
+    private final NotificationService notificationService;
 
     // --- CLUBS ---
 
@@ -83,7 +86,16 @@ public class ExtracurricularController {
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Club introuvable"));
             enr.setClub(c);
         }
-        return ResponseEntity.ok(clubEnrollmentRepository.save(enr));
+        ClubEnrollment saved = clubEnrollmentRepository.save(enr);
+        if (saved.getStudent() != null) {
+            String title = "Inscription Club Activité";
+            String textMsg = String.format("Votre enfant %s %s a été inscrit(e) au club '%s'.",
+                    saved.getStudent().getFirstName(), saved.getStudent().getLastName(),
+                    saved.getClub() != null ? saved.getClub().getName() : "Activité Périscolaire");
+            notificationService.sendNotification(saved.getTenantId(), null, saved.getStudent().getParentPhone(), saved.getStudent().getEmail(), 
+                    title, textMsg, "CLUB");
+        }
+        return ResponseEntity.ok(saved);
     }
 
     @DeleteMapping("/enrollments/{id}")

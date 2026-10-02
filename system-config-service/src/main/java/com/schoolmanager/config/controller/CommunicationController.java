@@ -16,6 +16,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import java.util.stream.Collectors;
+
 @RestController
 @RequestMapping("/api/v1/system/communication")
 @RequiredArgsConstructor
@@ -27,10 +29,22 @@ public class CommunicationController {
     // --- ANNOUNCEMENTS ---
 
     @GetMapping("/announcements/tenant/{tenantId}")
-    @PreAuthorize("hasAuthority('MESSAGING_VIEW')")
+    @PreAuthorize("hasAuthority('MESSAGING_VIEW') or hasRole('PARENT')")
     public ResponseEntity<List<SchoolAnnouncement>> getAnnouncements(@PathVariable UUID tenantId) {
         UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
-        return ResponseEntity.ok(schoolAnnouncementRepository.findByTenantIdOrderByDatePublishedDesc(jwtTenantId));
+        List<SchoolAnnouncement> list = schoolAnnouncementRepository.findByTenantIdOrderByDatePublishedDesc(jwtTenantId);
+
+        boolean isParent = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication()
+                .getAuthorities().stream()
+                .anyMatch(a -> "ROLE_PARENT".equals(a.getAuthority()));
+
+        if (isParent) {
+            list = list.stream()
+                    .filter(ann -> "ALL".equalsIgnoreCase(ann.getTargetAudience()) || "PARENTS".equalsIgnoreCase(ann.getTargetAudience()))
+                    .collect(Collectors.toList());
+        }
+
+        return ResponseEntity.ok(list);
     }
 
     @PostMapping("/announcements")
@@ -58,14 +72,14 @@ public class CommunicationController {
     // --- MESSAGES ---
 
     @GetMapping("/messages/tenant/{tenantId}")
-    @PreAuthorize("hasAuthority('MESSAGING_VIEW')")
+    @PreAuthorize("hasAuthority('MESSAGING_VIEW') or hasRole('PARENT')")
     public ResponseEntity<List<InternalMessage>> getMessages(@PathVariable UUID tenantId) {
         UUID jwtTenantId = SecurityUtils.getTenantIdToUse(tenantId);
         return ResponseEntity.ok(internalMessageRepository.findByTenantId(jwtTenantId));
     }
 
     @GetMapping("/messages/conversation/user1/{user1}/user2/{user2}")
-    @PreAuthorize("hasAuthority('MESSAGING_VIEW')")
+    @PreAuthorize("hasAuthority('MESSAGING_VIEW') or hasRole('PARENT')")
     public ResponseEntity<List<InternalMessage>> getConversation(
             @PathVariable UUID user1,
             @PathVariable UUID user2) {
@@ -76,7 +90,7 @@ public class CommunicationController {
     }
 
     @PostMapping("/messages")
-    @PreAuthorize("hasAuthority('MESSAGING_EDIT')")
+    @PreAuthorize("hasAuthority('MESSAGING_EDIT') or hasRole('PARENT')")
     public ResponseEntity<InternalMessage> sendMessage(@RequestBody InternalMessage msg) {
         if (!SecurityUtils.isSuperAdmin()) {
             msg.setTenantId(SecurityUtils.getCurrentTenantId());
